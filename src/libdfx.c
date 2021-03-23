@@ -386,12 +386,6 @@ int dfx_cfg_destroy(int package_id)
 		system(command);
 	}
 
-	if (package_node->load_image_name != NULL) {
-		snprintf(command, sizeof(command), "rm /lib/firmware/%s",
-			 package_node->load_image_name);
-		system(command);
-	}
-
 	if (!(package_node->flags & DFX_EXTERNAL_CONFIG_EN)) {
 		/* This call will do the following things
 		 * unmap the buffer properly
@@ -540,12 +534,7 @@ static int read_package_folder(struct dfx_package_node *package_node)
 		snprintf(command, sizeof(command), "cp %s /lib/firmware/",
 			 package_node->load_image_dtbo_path);
 		system(command);
-		if (package_node->load_image_path != NULL) {
-			snprintf(command, sizeof(command),
-				 "cp %s /lib/firmware/",
-				 package_node->load_image_path);
-			system(command);
-		}
+
 		if (package_node->load_drivers_dtbo_path != NULL) {
 			snprintf(command, sizeof(command),
 				 "cp %s /lib/firmware/",
