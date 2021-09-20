@@ -25,6 +25,7 @@
 #define DFX_DRIVER_CONFIG_ERROR			(0xCU)
 #define DFX_NO_VALID_DRIVER_DTO_FILE		(0xDU)
 #define DFX_DESTROY_PACKAGE_ERROR		(0xEU)
+#define DFX_FAIL_TO_OPEN_BIN_FILE		(0xFU)
 
 int dfx_cfg_init(const char *dfx_package_path,
                   const char *devpath, unsigned long flags);
@@ -32,5 +33,6 @@ int dfx_cfg_load(int package_id);
 int dfx_cfg_drivers_load(int package_id);
 int dfx_cfg_remove(int package_id);
 int dfx_cfg_destroy(int package_id);
+int dfx_get_active_uid_list(int *buffer);
 
 #endif

@@ -397,6 +397,40 @@ int dfx_cfg_destroy(int package_id)
 
 	return destroy_package(package_node->package_id);
 }
+/* This API populates buffer with {Node ID, Unique ID, Parent Unique ID, Function ID}
+ * for each applicable NodeID in the system.
+ *
+ * buffer: User buffer address
+ *
+ * Return: Number of bytes read from the firmware in case of success.
+ *         or Negative value on failure.
+ */
+int dfx_get_active_uid_list(int *buffer)
+{
+	const char* filename = "/sys/devices/platform/firmware:versal-firmware/uid-read";
+	int platform, count = 0;
+	FILE* fd;
+
+	platform = dfx_getplatform();
+	if (platform != VERSAL_PLATFORM)
+		return -DFX_INVALID_PLATFORM_ERROR;
+
+	fd = fopen(filename, "rb");
+	if (!fd) {
+		printf("Unable to open file!");
+		return -DFX_FAIL_TO_OPEN_BIN_FILE;
+	}
+
+	while(!feof(fd)) {
+		fread(&buffer[count], sizeof(int), 1,fd);
+		count++;
+	}
+
+	fclose(fd);
+	count = (count - 1) *  sizeof(int);
+
+	return count;
+}
 
 static int read_package_folder(struct dfx_package_node *package_node)
 {
