@@ -343,6 +343,32 @@ int main()
 
 }
 
+====================================================================
+ -Active UID info list: dfx_get_active_uid_list(int *buffer)
+====================================================================
+/* This API populates buffer with {Node ID, Unique ID, Parent Unique ID, Function ID}
+ * for each applicable NodeID in the system.
+ *
+ * buffer: User buffer address
+ *
+ * Return: Number of bytes read from the firmware in case of success.
+ *         or Negative value on failure.
+ *
+ * Note: The user buffer size should be 768 bytes.
+ *
+ */
+
+Usage example:
+#include "libdfx.h"
+
+/* More code */
+
+ ret = dfx_get_active_uid_list(&buffer);
+ if (ret)
+        return -1
+
+/* More code */
+
 ================
 Build procedure:
 ================
