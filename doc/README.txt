@@ -364,8 +364,33 @@ Usage example:
 /* More code */
 
  ret = dfx_get_active_uid_list(&buffer);
- if (ret)
+ if (ret < 0)
         return -1
+
+/* More code */
+
+=================================================================================
+ -Meta-header info: dfx_get_meta_header(char *binfile, int *buffer, int buf_size)
+=================================================================================
+/* This API populates buffer with meta-header info related to the user
+ * provided binary file (BIN/PDI).
+ *
+ * binfile: PDI Image.
+ * buffer: User buffer address
+ * buf_size : User buffer size.
+ *
+ * Return: Number of bytes read from the firmware in case of success.
+ *         or Negative value on failure.
+ */
+
+Usage example:
+#include "libdfx.h"
+
+/* More code */
+
+  ret = dfx_get_meta_header("/media/binary.bin", &buffer, buf_size);
+  if (ret < 0)
+	return -1
 
 /* More code */
 
