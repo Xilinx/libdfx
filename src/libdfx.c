@@ -397,6 +397,7 @@ int dfx_cfg_destroy(int package_id)
 
 	return destroy_package(package_node->package_id);
 }
+
 /* This API populates buffer with {Node ID, Unique ID, Parent Unique ID, Function ID}
  * for each applicable NodeID in the system.
  *
@@ -430,6 +431,74 @@ int dfx_get_active_uid_list(int *buffer)
 	count = (count - 1) *  sizeof(int);
 
 	return count;
+}
+
+/* This API populates buffer with meta-header info related to the user
+ * provided PDI.
+ *
+ * binfile: PDI Image.
+ * buffer: User buffer address
+ * buf_size : User buffer size.
+ *
+ * Return: Number of bytes read from the firmware in case of success.
+ *         or Negative value on failure.
+ */
+int dfx_get_meta_header(char *binfile, int *buffer, int buf_size)
+{
+	const char* filename = "/sys/devices/platform/firmware:versal-firmware/meta-header-read";
+	char command[2048], *token, *tmp, *tmp1;
+	int platform, count = 0;
+	FILE* fd;
+	DIR *FD;
+
+	platform = dfx_getplatform();
+	if (platform != VERSAL_PLATFORM)
+		return -DFX_INVALID_PLATFORM_ERROR;
+
+	fd = fopen(binfile, "rb");
+	if (!fd) {
+		printf("Unable to open binary file!");
+		return -DFX_FAIL_TO_OPEN_BIN_FILE;
+	}
+	fclose(fd);
+
+	FD = opendir("/lib/firmware");
+	if (FD)
+		closedir(FD);
+	else
+		system("mkdir -p /lib/firmware");
+
+	snprintf(command, sizeof(command), "cp %s /lib/firmware", binfile);
+	system(command);
+	tmp = strdup(binfile);
+	while((token = strsep(&tmp, "/")))
+		tmp1 = token;
+
+	snprintf(command, sizeof(command), "echo %s > /sys/devices/platform/firmware:versal-firmware/firmware", tmp1);
+	system(command);
+
+	free(tmp);
+
+	fd = fopen(filename, "rb");
+	if (!fd) {
+		printf("Unable to open sysfs binary file!");
+		return -DFX_FAIL_TO_OPEN_BIN_FILE;
+	}
+
+	while(!feof(fd)) {
+		if(buf_size < count) {
+			count = -DFX_INSUFFICIENT_MEM;
+			break;
+		}
+
+		fread(&buffer[count], sizeof(int), 1,fd);
+		count++;
+	}
+
+	fclose(fd);
+	closedir(FD);
+
+	return count * sizeof(int);
 }
 
 static int read_package_folder(struct dfx_package_node *package_node)
