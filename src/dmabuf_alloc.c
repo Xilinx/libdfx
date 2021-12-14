@@ -14,11 +14,11 @@
 #include <unistd.h>
 #include <sys/mman.h>
 #include "dmabuf_alloc.h"
-#include "ion.h"
+#include "dma-heap.h"
 
 static int open_device (int *devfd)
 {
-	*devfd = open("/dev/ion", O_RDWR);
+	*devfd = open("/dev/dma_heap/reserved", O_RDWR);
 	if (*devfd < 0) {
                 printf("%s: Failed to open device\n", __func__);
                 return -1;
@@ -27,52 +27,21 @@ static int open_device (int *devfd)
 	return 0;
 }
 
-static int find_dma_heap_id(int devfd, unsigned int *dma_heap_id)
+static int alloc_dma_buffer(struct dma_buffer_info *dma_data)
 {
-	struct ion_heap_data heap_info[ION_HEAP_TYPE_CUSTOM];
-	struct ion_heap_query heap_query;
-	int ret, i, heap_flag = 0;
-
-	memset(&heap_query, 0, sizeof(heap_query));
-        heap_query.heaps = (unsigned long int)&heap_info[0];
-        heap_query.cnt = ION_HEAP_TYPE_CUSTOM;
-
-        ret = ioctl(devfd, ION_IOC_HEAP_QUERY, &heap_query);
-        if (ret < 0) {
-                printf("%s: ION_IOC_HEAP_QUERY: Failed\n", __func__);
-		return -1;                
-        }
-
-        for (i = 0; i < heap_query.cnt; i++) {
-                if (heap_info[i].type == ION_HEAP_TYPE_DMA) {
-                        *dma_heap_id = heap_info[i].heap_id;
-			heap_flag = 1;
-                        break;
-                }
-        }
-
-        if (!heap_flag) {
-                printf("%s: ION_HEAP_TYPE_DMA not exists\n", __func__);
-                return -1;
-        }
-
-	return 0;
-}
-
-static int alloc_dma_buffer(unsigned int dma_heap_id,
-				struct dma_buffer_info *dma_data)
-{
-	struct ion_allocation_data alloc_data_info = {0};
+	struct dma_heap_allocation_data alloc_data_info = {
+		.len = dma_data->dma_buflen,
+		.fd = 0,
+		.fd_flags = O_RDWR | O_CLOEXEC,
+		.heap_flags = 0,
+	};
 	int ret;
 
-	alloc_data_info.heap_id_mask = 1 << dma_heap_id;
-        alloc_data_info.len = dma_data->dma_buflen;
-
-        ret = ioctl(dma_data->devfd, ION_IOC_ALLOC, &alloc_data_info);
-        if (ret < 0) {
-                printf("%s: ION_IOC_ALLOC: Failed\n", __func__);
-                return -1;
-        }
+	ret = ioctl(dma_data->devfd, DMA_HEAP_IOCTL_ALLOC, &alloc_data_info);
+	if (ret < 0) {
+		printf("%s: DMA_HEAP_IOCTL_ALLOC: Failed\n", __func__);
+		return -1;
+	}
 
         if (alloc_data_info.fd < 0 || alloc_data_info.len <= 0) {
                 printf("%s: Invalid mmap data\n", __func__);
@@ -103,8 +72,6 @@ err:
 
 int export_dma_buffer(struct dma_buffer_info *dma_data)
 {
-	struct ion_allocation_data alloc_data_info;
-	unsigned int dma_heap_id;
 	int devfd, ret;
 
 	if (!dma_data) {
@@ -116,12 +83,9 @@ int export_dma_buffer(struct dma_buffer_info *dma_data)
 	if (ret)
 		return ret;
 
-	ret = find_dma_heap_id(devfd, &dma_heap_id);
-	if (ret)
-		goto err;
-
 	dma_data->devfd = devfd;
-	ret = alloc_dma_buffer(dma_heap_id, dma_data);
+
+	ret = alloc_dma_buffer(dma_data);
 	if (ret)
 		goto err;
 

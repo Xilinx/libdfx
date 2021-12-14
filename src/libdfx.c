@@ -28,7 +28,7 @@
 
 #include "dmabuf_alloc.h"
 #include "libdfx.h"
-#include "ion.h"
+#include "dma-heap.h"
 
 #define DFX_IOCTL_LOAD_DMA_BUFF        _IOWR('R', 1, __u32)
 
@@ -819,7 +819,7 @@ static int dfx_package_load_dmabuf(struct dfx_package_node *package_node)
 	 */
 	ret = export_dma_buffer(package_node->dmabuf_info);
 	if (ret < 0) {
-		printf("%s: ion buffer alloc failed\n", __func__);
+		printf("%s: DMA buffer alloc failed\n", __func__);
 		goto err_update;
 	}
 
