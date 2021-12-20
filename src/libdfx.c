@@ -230,16 +230,19 @@ int dfx_cfg_load(int package_id)
 		 package_node->load_image_overlay_pck_path);
 	system(command);
 
-	snprintf(command, sizeof(command),
-		 "cat /sys/class/fpga_manager/fpga0/state >> state.txt");
-	ret = dfx_state(command, "operating");
-	if (ret) {
-		snprintf(command, sizeof(command), "rmdir %s",
-			 package_node->load_image_overlay_pck_path);
-		system(command);
-		printf("%s: Image configuration failed\n", __func__);
-		return -DFX_IMAGE_CONFIG_ERROR;
+	if (!(package_node->flags & DFX_EXTERNAL_CONFIG_EN)) {
+		snprintf(command, sizeof(command),
+			 "cat /sys/class/fpga_manager/fpga0/state >> state.txt");
+		ret = dfx_state(command, "operating");
+		if (ret) {
+			snprintf(command, sizeof(command), "rmdir %s",
+				 package_node->load_image_overlay_pck_path);
+			system(command);
+			printf("%s: Image configuration failed\n", __func__);
+			return -DFX_IMAGE_CONFIG_ERROR;
+		}
 	}
+
 	snprintf(command, sizeof(command), "cat %s/path >> state.txt",
 		 package_node->load_image_overlay_pck_path);
 	ret = dfx_state(command, package_node->load_image_dtbo_name);
