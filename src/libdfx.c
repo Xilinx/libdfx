@@ -239,6 +239,9 @@ int dfx_cfg_load(int package_id)
 				 package_node->load_image_overlay_pck_path);
 			system(command);
 			printf("%s: Image configuration failed\n", __func__);
+			snprintf(command, sizeof(command),
+				 "cat /sys/class/fpga_manager/fpga0/state");
+			system(command);
 			return -DFX_IMAGE_CONFIG_ERROR;
 		}
 	}
