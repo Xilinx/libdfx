@@ -20,5 +20,6 @@ set(LIBDFX_INCLUDE_DIRS
 
 file(COPY include/libdfx.h DESTINATION ${CMAKE_BINARY_DIR}/include)
 add_library(dfx ${libdfx_sources})
+set_target_properties(dfx PROPERTIES PUBLIC_HEADER "include/libdfx.h")
 target_include_directories(dfx PUBLIC ${LIBDFX_INCLUDE_DIRS})
-install(TARGETS dfx ARCHIVE DESTINATION ${CMAKE_BINARY_DIR}/usr/lib)
+install(TARGETS dfx ARCHIVE DESTINATION ${CMAKE_INSTALL_LIBDIR} PUBLIC_HEADER ${CMAKE_INSTALL_INCLUDEDIR})
