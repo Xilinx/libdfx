@@ -3,6 +3,7 @@
 #* SPDX-License-Identifier: MIT
 #***************************************************************
 
+include(GNUInstallDirs)
 # Specify the minimum version for CMake
 cmake_minimum_required(VERSION 2.8.9)	
 # Project's name
@@ -32,6 +33,7 @@ SET_TARGET_PROPERTIES(dfx_static PROPERTIES CLEAN_DIRECT_OUTPUT 1)
 
 target_include_directories(dfx_shared PUBLIC ${LIBDFX_INCLUDE_DIRS})
 target_include_directories(dfx_static PUBLIC ${LIBDFX_INCLUDE_DIRS})
+install(FILES "include/libdfx.h" DESTINATION ${CMAKE_INSTALL_INCLUDEDIR})
 install(TARGETS dfx_shared; dfx_static
-	ARCHIVE DESTINATION ${CMAKE_BINARY_DIR}
-	LIBRARY DESTINATION ${CMAKE_BINARY_DIR})
+	ARCHIVE DESTINATION ${CMAKE_INSTALL_LIBDIR}
+	LIBRARY DESTINATION ${CMAKE_INSTALL_LIBDIR})
