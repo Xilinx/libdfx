@@ -39,6 +39,8 @@
 #define MAX_CMD_LEN		512U
 #define MAX_AES_KEY_LEN         64U
 #define PLATFORM_STR_LEN	128U
+#define FPGA_WORD_SIZE		4U
+#define FPGA_DUMMY_BYTE		0xFFU
 
 struct dfx_package_node {
 	int  flags;
@@ -795,10 +797,11 @@ static int dfx_state(char *cmd, char *state)
 
 static int dfx_package_load_dmabuf(struct dfx_package_node *package_node)
 {
+	int word_align = 0, index, fd, ret;
 	struct dma_buf_sync sync = { 0 };
 	struct dma_buffer_info info;
 	long fileLen, count;
-	int fd, ret;
+	char *dma_buf;
 	FILE *fp;
 
 	fp = fopen(package_node->load_image_path, "rb");
@@ -811,6 +814,14 @@ static int dfx_package_load_dmabuf(struct dfx_package_node *package_node)
 	fseek(fp, 0, SEEK_END);
 	fileLen = ftell(fp);
 	fseek(fp, 0, SEEK_SET);
+
+	if (package_node->xilplatform == ZYNQMP_PLATFORM) {
+		word_align = fileLen % FPGA_WORD_SIZE;
+		if(word_align)
+			word_align = FPGA_WORD_SIZE - word_align;
+
+		fileLen = fileLen + word_align;
+	}
 
 	package_node->dmabuf_info = (struct dma_buffer_info *) calloc(1,
 					sizeof(struct dma_buffer_info));
@@ -839,8 +850,15 @@ static int dfx_package_load_dmabuf(struct dfx_package_node *package_node)
 	}
 
 	/* Copy Bitfile/PDI image into the Dmabuf */
-	count = fread((char *) package_node->dmabuf_info->dma_buffer, 1,
-		      fileLen, fp);
+	if (word_align) {
+		dma_buf = (char *) package_node->dmabuf_info->dma_buffer;
+		for (index = 0; index < word_align; index++)
+			dma_buf[index] = FPGA_DUMMY_BYTE;
+		fileLen = fileLen - word_align;
+		count = fread(&dma_buf[index], 1, fileLen, fp);
+	} else
+		count = fread((char *) package_node->dmabuf_info->dma_buffer, 1,
+			      fileLen, fp);
 	if (count != fileLen) {
 		printf("%s: Image copy failed\n", __func__);
 		goto unmap_buf;
