@@ -3,7 +3,7 @@
  * SPDX-License-Identifier: GPL-2.0
  *
  * This file is written by taking reference file from Linux kernel
- * at: tools/testing/selftests/android/ion/ionutils.c
+ * at: tools/testing/selftests/dmabuf-heaps/dmabuf-heap.c
  *
  ***************************************************************/
 

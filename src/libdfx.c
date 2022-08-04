@@ -828,11 +828,8 @@ static int dfx_package_load_dmabuf(struct dfx_package_node *package_node)
 	package_node->dmabuf_info->dma_buflen = fileLen;
 
 	/* This call will do the following things
-	 *      1. Create an ION client
-	 *      2. Query ION heap_id_mask from ION heap
-	 *      3. Allocate memory for this ION client as per heap_type and
-	 *         return a valid buffer fd
-	 *      4. Create memory mapped buffer for the buffer fd
+	 *   1. Allocate memory from the DMA pool and return a valid buffer fd
+	 *   2. Create memory mapped buffer for the buffer fd
 	 */
 	ret = export_dma_buffer(package_node->dmabuf_info);
 	if (ret < 0) {

@@ -3,7 +3,7 @@
  * SPDX-License-Identifier: GPL-2.0
  *
  * This file is written by taking reference file from Linux kernel
- * at: tools/testing/selftests/android/ion/ionutils.h
+ * at: tools/testing/selftests/dmabuf-heaps/dmabuf-heap.c
  *
  ***************************************************************/
 
@@ -24,7 +24,7 @@ struct dma_buffer_info {
 int export_dma_buffer(struct dma_buffer_info *dma_data);
 
 /* This API is used to close all references related to dmaable
- * memory allocated by the ION client
+ * memory allocated by the dma_heap.
  */
 int close_dma_buffer(struct dma_buffer_info *dma_data);
 
