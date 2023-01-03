@@ -77,6 +77,9 @@ static int dfx_getplatform(void);
 static int find_key(struct dfx_package_node *package_node);
 static int lengthOfLastWord2(const char *input);
 static void strlwr(char *destination, const char *source);
+#ifdef ENABLE_LIBDFX_TIME
+static inline double gettime(struct timeval  t0, struct timeval t1);
+#endif
 
 /* Provide a generic interface to the user to specify the required parameters
  * for the library.The calling process must call this API before it performs
@@ -98,21 +101,28 @@ int dfx_cfg_init(const char *dfx_package_path,
 		  const char *devpath, unsigned long flags)
 {
 	FPGA_NODE *package_node;
+	int err, ret = 0;
 	int platform;
-	int ret, err;
 	size_t len;
+#ifdef ENABLE_LIBDFX_TIME
+	struct timeval t1, t0;
+	double time;
 
+	gettimeofday(&t0, NULL);
+#endif
 	platform = dfx_getplatform();
 	if (platform == INVALID_PLATFORM) {
 		printf("%s: fpga manager not enabled in the kernel Image\r\n",
 			__func__);
-		return -DFX_INVALID_PLATFORM_ERROR;
+		ret = -DFX_INVALID_PLATFORM_ERROR;
+		goto END;
 	}
 
 	package_node = create_package();
 	if (package_node == NULL) {
 		printf("%s: create_package failed\r\n", __func__);
-		return -DFX_CREATE_PACKAGE_ERROR;
+		ret = -DFX_CREATE_PACKAGE_ERROR;
+		goto END;
 	}
 
 	package_node->xilplatform = platform;
@@ -159,6 +169,12 @@ destroy_package:
 	err = destroy_package(package_node->package_id);
 	if (err)
 		printf("%s:Destroy package failed \r\n", __func__);
+END:
+#ifdef ENABLE_LIBDFX_TIME
+	gettimeofday(&t1, NULL);
+	time = gettime(t0, t1);
+	printf("%s API Time taken: %f Milli Seconds\n\r", __func__, time);
+#endif
 	return ret;
 }
 
@@ -174,20 +190,27 @@ destroy_package:
 int dfx_cfg_load(int package_id)
 {
 	FPGA_NODE *package_node;
-	int len, ret, fd, buffd;
+	int len, fd, buffd, ret = 0;
 	char command[MAX_CMD_LEN];
 	char *str;
 	DIR *FD;
+#ifdef ENABLE_LIBDFX_TIME
+	struct timeval total_t1, total_t0, load_t1, load_t0;
+	double total_time, load_time;
 
+	gettimeofday(&total_t0, NULL);
+#endif
 	if (package_id < 0) {
 		printf("%s: Invalid package id\n", __func__);
-		return -DFX_INVALID_PACKAGE_ID_ERROR;
+		ret = -DFX_INVALID_PACKAGE_ID_ERROR;
+		goto END;
 	}
 
 	package_node = get_package(package_id);
 	if (package_node == NULL) {
 		printf("%s: fail to get package_node\n", __func__);
-		return -DFX_GET_PACKAGE_ERROR;
+		ret = -DFX_GET_PACKAGE_ERROR;
+		goto END;
 	}
 
 	if (!(package_node->flags & DFX_EXTERNAL_CONFIG_EN)) {
@@ -195,7 +218,8 @@ int dfx_cfg_load(int package_id)
 		if (fd < 0) {
 			printf("%s: Cannot open device file...\n",
 			       __func__);
-			return -DFX_FAIL_TO_OPEN_DEV_NODE;
+			ret = -DFX_FAIL_TO_OPEN_DEV_NODE;
+			goto END;
 		}
 
 		snprintf(command, sizeof(command),
@@ -230,7 +254,13 @@ int dfx_cfg_load(int package_id)
 	snprintf(command, sizeof(command), "echo -n %s > %s/path",
 		 package_node->load_image_dtbo_name,
 		 package_node->load_image_overlay_pck_path);
+#ifdef ENABLE_LIBDFX_TIME
+	gettimeofday(&load_t0, NULL);
+#endif
 	system(command);
+#ifdef ENABLE_LIBDFX_TIME
+	gettimeofday(&load_t1, NULL);
+#endif
 
 	if (!(package_node->flags & DFX_EXTERNAL_CONFIG_EN)) {
 		snprintf(command, sizeof(command),
@@ -244,7 +274,8 @@ int dfx_cfg_load(int package_id)
 			snprintf(command, sizeof(command),
 				 "cat /sys/class/fpga_manager/fpga0/state");
 			system(command);
-			return -DFX_IMAGE_CONFIG_ERROR;
+			ret = -DFX_IMAGE_CONFIG_ERROR;
+			goto END;
 		}
 	}
 
@@ -256,10 +287,20 @@ int dfx_cfg_load(int package_id)
 			 package_node->load_image_overlay_pck_path);
 		system(command);
 		printf("%s: Image configuration failed\n", __func__);
-		return -DFX_IMAGE_CONFIG_ERROR;
+		ret = -DFX_IMAGE_CONFIG_ERROR;
+		goto END;
 	}
 
-	return 0;
+END:
+#ifdef ENABLE_LIBDFX_TIME
+	gettimeofday(&total_t1, NULL);
+	total_time = gettime(total_t0, total_t1);
+	load_time =  gettime(load_t0, load_t1);
+	printf("%s: Image load time from pre-allocated buffer: %f Milli Seconds\n\r",
+	       __func__, load_time);
+	printf("%s API Total time taken: %f Milli Seconds\n\r", __func__, total_time);
+#endif
+	return ret;
 }
 
 /* This API is Responsible for loading the drivers corresponding to a package
@@ -272,22 +313,31 @@ int dfx_cfg_drivers_load(int package_id)
 {
 	FPGA_NODE *package_node;
 	char command[MAX_CMD_LEN];
-	int len, ret;
+	int len, ret = 0;
 	char *str;
+#ifdef ENABLE_LIBDFX_TIME
+	struct timeval t1, t0;
+	double time;
 
+	gettimeofday(&t0, NULL);
+#endif
 	if (package_id < 0) {
 		printf("%s: Invalid package id\n", __func__);
-		return -DFX_INVALID_PACKAGE_ID_ERROR;
+		ret = -DFX_INVALID_PACKAGE_ID_ERROR;
+		goto END;
 	}
 
 	package_node = get_package(package_id);
 	if (package_node == NULL) {
 		printf("%s: fail to get package_node\n", __func__);
-		return -DFX_GET_PACKAGE_ERROR;
+		ret = -DFX_GET_PACKAGE_ERROR;
+		goto END;
 	}
 
-	if (package_node->load_drivers_dtbo_path == NULL)
-		return -DFX_NO_VALID_DRIVER_DTO_FILE;
+	if (package_node->load_drivers_dtbo_path == NULL) {
+		ret = -DFX_NO_VALID_DRIVER_DTO_FILE;
+		goto END;
+	}
 
 	snprintf(command, sizeof(command),
 		 "/configfs/device-tree/overlays/%s_driver_%d",
@@ -312,10 +362,16 @@ int dfx_cfg_drivers_load(int package_id)
 			 package_node->load_drivers_overlay_pck_path);
 		system(command);
 		printf("%s: Drivers DTBO config failed\n", __func__);
-		return -DFX_DRIVER_CONFIG_ERROR;
+		ret = -DFX_DRIVER_CONFIG_ERROR;
 	}
 
-	return 0;
+END:
+#ifdef ENABLE_LIBDFX_TIME
+	gettimeofday(&t1, NULL);
+	time = gettime(t0, t1);
+	printf("%s API Time taken: %f Milli Seconds\n\r", __func__, time);
+#endif
+	return ret;
 }
 
 /* This API is Responsible for unloading the drivers corresponding to a package
@@ -328,17 +384,25 @@ int dfx_cfg_remove(int package_id)
 {
 	FPGA_NODE *package_node;
 	char command[MAX_CMD_LEN];
+	int ret = 0;
 	DIR *FD;
+#ifdef ENABLE_LIBDFX_TIME
+	struct timeval t1, t0;
+	double time;
 
+	gettimeofday(&t0, NULL);
+#endif
 	if (package_id < 0) {
 		printf("%s: Invalid package id\n", __func__);
-		return -DFX_INVALID_PACKAGE_ID_ERROR;
+		ret = -DFX_INVALID_PACKAGE_ID_ERROR;
+		goto END;
 	}
 
 	package_node = get_package(package_id);
 	if (package_node == NULL) {
 		printf("%s: fail to get package_node\n", __func__);
-		return -DFX_GET_PACKAGE_ERROR;
+		ret = -DFX_GET_PACKAGE_ERROR;
+		goto END;
 	}
 
 	if (package_node->load_drivers_overlay_pck_path != NULL) {
@@ -362,7 +426,13 @@ int dfx_cfg_remove(int package_id)
 		}
 	}
 
-	return 0;
+END:
+#ifdef ENABLE_LIBDFX_TIME
+	gettimeofday(&t1, NULL);
+	time = gettime(t0, t1);
+	printf("%s API Time taken: %f Milli Seconds\n\r", __func__, time);
+#endif
+	return ret;
 }
 
 /* This API is Responsible for release/destroy the resouces allocated
@@ -376,16 +446,24 @@ int dfx_cfg_destroy(int package_id)
 {
 	FPGA_NODE *package_node;
 	char command[MAX_CMD_LEN];
+	int ret = 0;
+#ifdef ENABLE_LIBDFX_TIME
+	struct timeval t1, t0;
+	double time;
 
+	gettimeofday(&t0, NULL);
+#endif
 	if (package_id < 0) {
 		printf("%s: Invalid package id\n", __func__);
-		return -DFX_INVALID_PACKAGE_ID_ERROR;
+		ret = -DFX_INVALID_PACKAGE_ID_ERROR;
+		goto END;
 	}
 
 	package_node = get_package(package_id);
 	if (package_node == NULL) {
 		printf("%s: fail to get package_node\n", __func__);
-		return -DFX_GET_PACKAGE_ERROR;
+		ret = -DFX_GET_PACKAGE_ERROR;
+		goto END;
 	}
 
 	if (package_node->load_image_overlay_pck_path != NULL) {
@@ -403,7 +481,14 @@ int dfx_cfg_destroy(int package_id)
 		close_dma_buffer(package_node->dmabuf_info);
 	}
 
-	return destroy_package(package_node->package_id);
+	ret = destroy_package(package_node->package_id);
+END:
+#ifdef ENABLE_LIBDFX_TIME
+	gettimeofday(&t1, NULL);
+	time = gettime(t0, t1);
+	printf("%s API Time taken: %f Milli Seconds\n\r", __func__, time);
+#endif
+	return ret;
 }
 
 /* This API populates buffer with {Node ID, Unique ID, Parent Unique ID, Function ID}
@@ -417,17 +502,25 @@ int dfx_cfg_destroy(int package_id)
 int dfx_get_active_uid_list(int *buffer)
 {
 	const char* filename = "/sys/devices/platform/firmware:versal-firmware/uid-read";
-	int platform, count = 0;
+	int platform, ret = 0, count = 0;
 	FILE* fd;
+#ifdef ENABLE_LIBDFX_TIME
+	struct timeval t1, t0;
+	double time;
 
+	gettimeofday(&t0, NULL);
+#endif
 	platform = dfx_getplatform();
-	if (platform != VERSAL_PLATFORM)
-		return -DFX_INVALID_PLATFORM_ERROR;
+	if (platform != VERSAL_PLATFORM) {
+		ret = -DFX_INVALID_PLATFORM_ERROR;
+		goto END;
+	}
 
 	fd = fopen(filename, "rb");
 	if (!fd) {
 		printf("Unable to open file!");
-		return -DFX_FAIL_TO_OPEN_BIN_FILE;
+		ret = -DFX_FAIL_TO_OPEN_BIN_FILE;
+		goto END;
 	}
 
 	while(!feof(fd)) {
@@ -436,9 +529,14 @@ int dfx_get_active_uid_list(int *buffer)
 	}
 
 	fclose(fd);
-	count = (count - 1) *  sizeof(int);
-
-	return count;
+	ret = (count - 1) *  sizeof(int);
+END:
+#ifdef ENABLE_LIBDFX_TIME
+	gettimeofday(&t1, NULL);
+	time = gettime(t0, t1);
+	printf("%s API Time taken: %f Milli Seconds\n\r", __func__, time);
+#endif
+	return ret;
 }
 
 /* This API populates buffer with meta-header info related to the user
@@ -455,18 +553,26 @@ int dfx_get_meta_header(char *binfile, int *buffer, int buf_size)
 {
 	const char* filename = "/sys/devices/platform/firmware:versal-firmware/meta-header-read";
 	char command[2048], *token, *tmp, *tmp1;
-	int platform, count = 0;
+	int platform, ret = 0, count = 0;
 	FILE* fd;
 	DIR *FD;
+#ifdef ENABLE_LIBDFX_TIME
+	struct timeval t1, t0;
+	double time;
 
+	gettimeofday(&t0, NULL);
+#endif
 	platform = dfx_getplatform();
-	if (platform != VERSAL_PLATFORM)
-		return -DFX_INVALID_PLATFORM_ERROR;
+	if (platform != VERSAL_PLATFORM) {
+		ret = -DFX_INVALID_PLATFORM_ERROR;
+		goto END;
+	}
 
 	fd = fopen(binfile, "rb");
 	if (!fd) {
 		printf("Unable to open binary file!");
-		return -DFX_FAIL_TO_OPEN_BIN_FILE;
+		ret = -DFX_FAIL_TO_OPEN_BIN_FILE;
+		goto END;
 	}
 	fclose(fd);
 
@@ -490,7 +596,8 @@ int dfx_get_meta_header(char *binfile, int *buffer, int buf_size)
 	fd = fopen(filename, "rb");
 	if (!fd) {
 		printf("Unable to open sysfs binary file!");
-		return -DFX_FAIL_TO_OPEN_BIN_FILE;
+		ret = -DFX_FAIL_TO_OPEN_BIN_FILE;
+		goto END;
 	}
 
 	while(!feof(fd)) {
@@ -506,7 +613,14 @@ int dfx_get_meta_header(char *binfile, int *buffer, int buf_size)
 	fclose(fd);
 	closedir(FD);
 
-	return count * sizeof(int);
+	ret = count * sizeof(int);
+END:
+#ifdef ENABLE_LIBDFX_TIME
+	gettimeofday(&t1, NULL);
+	time = gettime(t0, t1);
+	printf("%s API Time taken: %f Milli Seconds\n\r", __func__, time);
+#endif
+	return ret;
 }
 
 static int read_package_folder(struct dfx_package_node *package_node)
@@ -959,3 +1073,10 @@ static inline void strlwr(char *destination, const char *source)
 		destination++;
 	}
 }
+
+#ifdef ENABLE_LIBDFX_TIME
+static inline double gettime(struct timeval  t0, struct timeval t1)
+{
+	return ((t1.tv_sec - t0.tv_sec) * 1000.0f + (t1.tv_usec -t0.tv_usec) / 1000.0f);
+}
+#endif

@@ -8,6 +8,10 @@ cmake_minimum_required(VERSION 2.8.9)
 
 project(libdfx C)
 
+OPTION(ENABLE_LIBDFX_TIME, OFF)
+IF(ENABLE_LIBDFX_TIME)
+add_compile_definitions(ENABLE_LIBDFX_TIME)
+endif(ENABLE_LIBDFX_TIME)
 #link_directories(${CMAKE_BINARY_DIR}/lib)
 	
 # Project's name
