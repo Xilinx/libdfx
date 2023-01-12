@@ -42,6 +42,8 @@
 #define FPGA_WORD_SIZE		4U
 #define FPGA_DUMMY_BYTE		0xFFU
 
+#define ZYNQMP_MAX_ERR	27U
+
 struct dfx_package_node {
 	int  flags;
 	int  xilplatform;
@@ -67,6 +69,42 @@ typedef struct dfx_package_node FPGA_NODE;
 
 FPGA_NODE *head_node, *first_node, *temp_node = NULL, *prev_node, next_node;
 
+typedef struct {
+        int err_code;
+        char *err_str;
+} dfx_err;
+
+static dfx_err zynqmp_err[] = {
+	[0] = { .err_code =  XFPGA_ERROR_CSUDMA_INIT_FAIL, .err_str = "Failed to initialize the CSUDMA module" },
+	[1] = { .err_code =  XFPGA_ERROR_PL_POWER_UP, .err_str = " Failed to power-up the PL" },
+	[2] = { .err_code =  XFPGA_ERROR_PL_ISOLATION, .err_str = "Failed to perform the PS-PL isolation " },
+	[3] = { .err_code =  XPFGA_ERROR_PCAP_INIT, .err_str = "Failed to initialize the PCAP IP Initialization" },
+	[4] = { .err_code =  XFPGA_ERROR_BITSTREAM_LOAD_FAIL, .err_str = " PL Configuration failed" },
+	[5] = { .err_code =  XFPGA_ERROR_CRYPTO_FLAGS, .err_str = "Failed due to incorrect user crypto flags" },
+	[6] = { .err_code =  XFPGA_ERROR_HDR_AUTH, .err_str = "Failed to authenticate the image headers" },
+	[7] = { .err_code =  XFPGA_ENC_ISCOMPULSORY, .err_str = "Support only encrypted Image loading" },
+	[8] = { .err_code =  XFPGA_PARTITION_AUTH_FAILURE, .err_str = "Image authentication failed" },
+	[9] = { .err_code =  XFPGA_STRING_INVALID_ERROR, .err_str = "Firmware internal error" },
+	[10] = { .err_code =  XFPGA_ERROR_SECURE_CRYPTO_FLAGS, .err_str = "Failed due to incorrect user crypto flags" },
+	[11] = { .err_code =  XFPGA_ERROR_SECURE_MODE_EN, .err_str = "Supports only secure Images loading" },
+	[12] = { .err_code =  XFPGA_HDR_NOAUTH_PART_AUTH, .err_str = "Image header authentication failed" },
+	[13] = { .err_code =  XFPGA_DEC_WRONG_KEY_SOURCE, .err_str = "Decryption failed due to wrong key source" },
+	[14] = { .err_code =  XFPGA_ERROR_DDR_AUTH_VERIFY_SPK, .err_str = "DDR Image authentication failed due to Invalid keys" },
+	[15] = { .err_code =  XFPGA_ERROR_DDR_AUTH_PARTITION, .err_str = "Failed to authentication DDR image partition" },
+	[16] = { .err_code =  XFPGA_ERROR_DDR_AUTH_WRITE_PL, .err_str = "DDR Image authentication failed" },
+	[17] = { .err_code =  XFPGA_ERROR_OCM_AUTH_VERIFY_SPK, .err_str = "OCM Image authentication failed due to Invalid keys" },
+	[18] = { .err_code =  XFPGA_ERROR_OCM_AUTH_PARTITION, .err_str = "Failed to authentication OCM image partition" },
+	[19] = { .err_code =  XFPGA_ERROR_OCM_REAUTH_WRITE_PL, .err_str = "OCM Image authentication failed" },
+	[20] = { .err_code =  XFPGA_ERROR_PCAP_PL_DONE, .err_str = "Failed to get the PCAP done status" },
+	[21] = { .err_code =  XFPGA_ERROR_AES_DECRYPT_PL, .err_str = "Image AES decryption failed" },
+	[22] = { .err_code =  XFPGA_ERROR_CSU_PCAP_TRANSFER, .err_str = "PCAP failed to transfer the Image" },
+	[23] = { .err_code =  XFPGA_ERROR_PLSTATE_UNKNOWN, .err_str = "PL is in Unknow state" },
+	[23] = { .err_code =  XFPGA_ERROR_BITSTREAM_FORMAT, .err_str = "Bitstream format error" },
+	[24] = { .err_code =  XFPGA_ERROR_UNALIGN_ADDR, .err_str = "Error: Received Unaligned Bitstream address" },
+	[25] = { .err_code =  XFPGA_ERROR_AES_INIT, .err_str = "AES initialization failed" },
+	[26] = { .err_code =  XFPGA_ERROR_EFUSE_CHECK, .err_str = "Support only secure image configuration" },
+};
+
 static struct dfx_package_node *create_package(void);
 static struct dfx_package_node *get_package(int package_id);
 static int destroy_package(int package_id);
@@ -77,6 +115,8 @@ static int dfx_getplatform(void);
 static int find_key(struct dfx_package_node *package_node);
 static int lengthOfLastWord2(const char *input);
 static void strlwr(char *destination, const char *source);
+static int dfx_get_error(char *cmd);
+static void zynqmp_print_err_msg(int err);
 #ifdef ENABLE_LIBDFX_TIME
 static inline double gettime(struct timeval  t0, struct timeval t1);
 #endif
@@ -190,7 +230,7 @@ END:
 int dfx_cfg_load(int package_id)
 {
 	FPGA_NODE *package_node;
-	int len, fd, buffd, ret = 0;
+	int len, fd, buffd, ret = 0, err = 0;
 	char command[MAX_CMD_LEN];
 	char *str;
 	DIR *FD;
@@ -267,12 +307,14 @@ int dfx_cfg_load(int package_id)
 			 "cat /sys/class/fpga_manager/fpga0/state >> state.txt");
 		ret = dfx_state(command, "operating");
 		if (ret) {
+			err = dfx_get_error(command);
 			snprintf(command, sizeof(command), "rmdir %s",
 				 package_node->load_image_overlay_pck_path);
 			system(command);
-			printf("%s: Image configuration failed\n", __func__);
-			snprintf(command, sizeof(command),
-				 "cat /sys/class/fpga_manager/fpga0/state");
+			printf("%s: Image configuration failed with error: 0x%x\n",
+			        __func__, err);
+			if (package_node->xilplatform == ZYNQMP_PLATFORM)
+				zynqmp_print_err_msg(err);
 			system(command);
 			ret = -DFX_IMAGE_CONFIG_ERROR;
 			goto END;
@@ -909,6 +951,27 @@ static int dfx_state(char *cmd, char *state)
 	return 1;
 }
 
+static int dfx_get_error(char *cmd)
+{
+	char string[PLATFORM_STR_LEN];
+	FILE *fp;
+	int c;
+
+	system(cmd);
+	fp = fopen("state.txt", "r");
+	c = getc(fp);
+	while(c!=EOF) {
+		fscanf(fp, "%s", string);
+		c = getc(fp);
+	}
+
+	fclose(fp);
+
+	system("rm state.txt");
+
+    return (int)strtol(string, NULL, 0);
+}
+
 static int dfx_package_load_dmabuf(struct dfx_package_node *package_node)
 {
 	int word_align = 0, index, fd, ret;
@@ -1072,6 +1135,35 @@ static inline void strlwr(char *destination, const char *source)
 		source++;
 		destination++;
 	}
+}
+
+static void zynqmp_print_err_msg(int err)
+{
+	int i, err_found = 0;
+
+	if ((err & 0xFF) == XFPGA_VALIDATE_ERROR)
+		printf("Error: Image validation");
+	if ((err & 0xFF) == XFPGA_PRE_CONFIG_ERROR)
+		printf("Error: Image Pre-configuration");
+	if ((err & 0xFF) == XFPGA_WRITE_BITSTREAM_ERROR)
+                printf("Error: Image write:");
+	if ((err & 0xFF) == XFPGA_POST_CONFIG_ERROR)
+                printf("Error: Image Post-configuration");
+	if ((err & 0xFF) == XFPGA_OPS_NOT_IMPLEMENTED)
+                printf("Error: Operation not supported");
+	if ((err & 0xFF) == XFPGA_INVALID_PARAM)
+                printf("Error: Invalid input parameters");
+
+	for (i = 0; i < ZYNQMP_MAX_ERR; i++) {
+		if (zynqmp_err[i].err_code == (err >> 8) & 0xFF) {
+			printf(": %s\r\n", zynqmp_err[i].err_str);
+			err_found++;
+			break;
+		}
+	}
+
+	if ((!err_found) && (err & 0xFF))
+		printf("\r\n");
 }
 
 #ifdef ENABLE_LIBDFX_TIME
