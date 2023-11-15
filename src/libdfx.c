@@ -118,6 +118,20 @@ static int lengthOfLastWord2(const char *input);
 static void strlwr(char *destination, const char *source);
 static int dfx_get_error(char *cmd);
 static void zynqmp_print_err_msg(int err);
+static int dfx_cfg_init_common(const char *dfx_package_path, const char *dfx_bin_file,
+			       const char *dfx_dtbo_file, const char *dfx_driver_dtbo_file,
+			       const char *dfx_aes_key_file, const char *devpath,
+			       unsigned long flags);
+static int read_package_byname(struct dfx_package_node *package_node,
+			       const char *dfx_bin_file, const char *dfx_dtbo_file,
+			       const char *dfx_driver_dtbo_file,
+			       const char *dfx_aes_key_file);
+static char *get_file_name_from_path(char *full_path);
+static void copy_file_to_firmware(const char *file);
+static int validate_input_files(const char *dfx_bin_file, const char *dfx_dtbo_file,
+				const char *dfx_driver_dtbo_file, const char *dfx_aes_key_file,
+				unsigned long flags);
+static bool file_exists(const char *filename);
 #ifdef ENABLE_LIBDFX_TIME
 static inline double gettime(struct timeval  t0, struct timeval t1);
 #endif
@@ -141,76 +155,82 @@ static inline double gettime(struct timeval  t0, struct timeval t1);
 int dfx_cfg_init(const char *dfx_package_path,
 		  const char *devpath, unsigned long flags)
 {
-	FPGA_NODE *package_node;
-	int err, ret = 0;
-	int platform;
-	size_t len;
+	int ret = 0;
 #ifdef ENABLE_LIBDFX_TIME
 	struct timeval t1, t0;
 	double time;
 
 	gettimeofday(&t0, NULL);
 #endif
-	platform = dfx_getplatform();
-	if (platform == INVALID_PLATFORM) {
-		printf("%s: fpga manager not enabled in the kernel Image\r\n",
-			__func__);
-		ret = -DFX_INVALID_PLATFORM_ERROR;
-		goto END;
+
+	if (dfx_package_path == NULL) {
+		printf("%s: Invalid input args\n", __func__);
+		return -DFX_INVALID_PARAM;
 	}
 
-	package_node = create_package();
-	if (package_node == NULL) {
-		printf("%s: create_package failed\r\n", __func__);
-		ret = -DFX_CREATE_PACKAGE_ERROR;
-		goto END;
-	}
+	ret = dfx_cfg_init_common(dfx_package_path, NULL, NULL, NULL, NULL,
+				  devpath, flags);
 
-	package_node->xilplatform = platform;
-	package_node->flags = flags;
+#ifdef ENABLE_LIBDFX_TIME
+	gettimeofday(&t1, NULL);
+	time = gettime(t0, t1);
+	printf("%s API Time taken: %f Milli Seconds\n\r", __func__, time);
+#endif
+	return ret;
+}
 
-	/*Update package path */
-	len = strlen(dfx_package_path);
-	if (dfx_package_path[len-1] != '/') {
-		/* one for extra char, one for trailing zero */
-		package_node->package_path = (char *)malloc(len + 1 + 1);
-		strcpy(package_node->package_path, dfx_package_path);
-		package_node->package_path[len] = '/';
-		package_node->package_path[len + 1] = '\0';
-	} else {
-		package_node->package_path = (char *)malloc(len + 1);
-		strcpy(package_node->package_path, dfx_package_path);
-	}
+/* Provide a generic interface to the user to specify the required parameters
+ * for FPGA programming.It takes absolute paths of all individual files as
+ * arguments and perform the required init functionality.
+ * The calling process must call this API before it performs -load/remove.
+ *
+ * const char *dfx_bin_file: Absolute pdi/bistream file path(The one user wants to load).
+ *             -Ex:/lib/firmware/xilinx/example/example.pdi
+ *
+ * const char *dfx_dtbo_file: Absolute relevant dtbo file path
+ *             -Ex: /lib/firmware/xilinx/example/example.dtbo
+ *
+ * const char *dfx_driver_dtbo_file: Absolute relevant dtbo file path
+ *             - Ex: /lib/firmware/xilinx/example/drivers.dtbo (or) NULL
+ * Note: To use the deferred probe functionality Both Image DTBO and relevant
+ * Drivers DTBO files are mandatory for other use cases user should pass "NULL".
+ *
+ * char *dfx_aes_key_file: Absolute relevant aes key file path
+ *             Ex: /lib/firmware/xilinx/example/Aes_key.nky (or) NULL
+ * Note: If the bitstream is encrypted with the user-key then the user needs to
+ * pass relevant aes_key.key file for other use cases user should pass "NULL".
+ *
+ * char *devpath: The dev interface is exposed at /dev/fpga-deviceN.
+ * Where N is the interface-device number.
+ *
+ * unsigned long flags: Flags to specify any special instructions for the
+ * library to perform.
+ *
+ * Return: returns unique package_Id or Error code on failure.
+ */
+int dfx_cfg_init_file(const char *dfx_bin_file, const char *dfx_dtbo_file,
+		      const char *dfx_driver_dtbo_file, const char *dfx_aes_key_file,
+		      const char *devpath, unsigned long flags)
+{
+	int len, ret = 0;
+#ifdef ENABLE_LIBDFX_TIME
+	struct timeval t1, t0;
+	double time;
 
-	ret = read_package_folder(package_node);
+	gettimeofday(&t0, NULL);
+#endif
+	/* Validate Inputs */
+	ret = validate_input_files(dfx_bin_file, dfx_dtbo_file,
+				   dfx_driver_dtbo_file, dfx_aes_key_file,
+				   flags);
 	if (ret) {
-		printf("%s: package read failed\r\n", __func__);
-		goto destroy_package;
+		printf("%s: Invalid input args\n", __func__);
+		return ret;
 	}
 
-	if (flags & DFX_ENCRYPTION_USERKEY_EN) {
-		ret = find_key(package_node);
-		if (ret) {
-			printf("%s: fail to get key info\r\n", __func__);
-			goto destroy_package;
-		}
-	}
-
-	if (!(flags & DFX_EXTERNAL_CONFIG_EN)) {
-		ret = dfx_package_load_dmabuf(package_node);
-		if (ret) {
-			printf("%s: load dmabuf failed\r\n", __func__);
-			goto destroy_package;
-		}
-	}
-
-	return package_node->package_id;
-
-destroy_package:
-	err = destroy_package(package_node->package_id);
-	if (err)
-		printf("%s:Destroy package failed \r\n", __func__);
-END:
+	ret = dfx_cfg_init_common(NULL, dfx_bin_file, dfx_dtbo_file,
+				  dfx_driver_dtbo_file, dfx_aes_key_file,
+				  devpath, flags);
 #ifdef ENABLE_LIBDFX_TIME
 	gettimeofday(&t1, NULL);
 	time = gettime(t0, t1);
@@ -1165,6 +1185,241 @@ static void zynqmp_print_err_msg(int err)
 
 	if ((!err_found) && (err & 0xFF))
 		printf("\r\n");
+}
+
+static int dfx_cfg_init_common(const char *dfx_package_path, const char *dfx_bin_file,
+			       const char *dfx_dtbo_file, const char *dfx_driver_dtbo_file,
+			       const char *dfx_aes_key_file, const char *devpath,
+			       unsigned long flags)
+{
+	FPGA_NODE *package_node;
+	int err, ret = 0;
+	int platform;
+	size_t len;
+
+	platform = dfx_getplatform();
+	if (platform == INVALID_PLATFORM) {
+		printf("%s: fpga manager not enabled in the kernel Image\r\n", __func__);
+		ret = -DFX_INVALID_PLATFORM_ERROR;
+		goto END;
+	}
+
+	package_node = create_package();
+	if (package_node == NULL) {
+		printf("%s: create_package failed\r\n", __func__);
+		ret = -DFX_CREATE_PACKAGE_ERROR;
+		goto END;
+	}
+
+	package_node->xilplatform = platform;
+	package_node->flags = flags;
+
+	if (dfx_package_path == NULL) {
+		ret = read_package_byname(package_node, dfx_bin_file,
+					  dfx_dtbo_file, dfx_driver_dtbo_file,
+					  dfx_aes_key_file);
+		if (ret) {
+			printf("%s: package read failed\r\n", __func__);
+			goto destroy_package;
+		}
+	} else {
+		/*Update package path */
+		len = strlen(dfx_package_path);
+		if (dfx_package_path[len-1] != '/') {
+			/* one for extra char, one for trailing zero */
+			package_node->package_path = (char *)malloc(len + 1 + 1);
+			strcpy(package_node->package_path, dfx_package_path);
+			package_node->package_path[len] = '/';
+			package_node->package_path[len + 1] = '\0';
+		} else {
+			package_node->package_path = (char *)malloc(len + 1);
+			strcpy(package_node->package_path, dfx_package_path);
+		}
+
+		ret = read_package_folder(package_node);
+		if (ret) {
+			printf("%s: package read failed\r\n", __func__);
+			goto destroy_package;
+		}
+	}
+
+	if (flags & DFX_ENCRYPTION_USERKEY_EN) {
+		ret = find_key(package_node);
+		if (ret) {
+			printf("%s: fail to get key info\r\n", __func__);
+			goto destroy_package;
+		}
+	}
+
+	if (!(flags & DFX_EXTERNAL_CONFIG_EN)) {
+		ret = dfx_package_load_dmabuf(package_node);
+		if (ret) {
+			printf("%s: load dmabuf failed\r\n", __func__);
+			goto destroy_package;
+		}
+	}
+
+	return package_node->package_id;
+
+destroy_package:
+	err = destroy_package(package_node->package_id);
+	if (err)
+		printf("%s:Destroy package failed \r\n", __func__);
+END:
+	return ret;
+}
+
+static int read_package_byname(struct dfx_package_node *package_node,
+			       const char *dfx_bin_file, const char *dfx_dtbo_file,
+			       const char *dfx_driver_dtbo_file,
+			       const char *dfx_aes_key_file)
+{
+	int ret;
+	char *str;
+	char slen;
+
+	if(dfx_bin_file != NULL) {
+		package_node->load_image_path = strdup(dfx_bin_file);
+		str = strdup(get_file_name_from_path(package_node->load_image_path));
+		package_node->load_image_name = str;
+		copy_file_to_firmware(dfx_bin_file);
+	} else {
+		return -DFX_READ_PACKAGE_ERROR;
+	}
+
+	if (dfx_dtbo_file != NULL) {
+		package_node->load_image_dtbo_path = strdup(dfx_dtbo_file);
+		str = strdup(get_file_name_from_path(package_node->load_image_dtbo_path));
+		package_node->load_image_dtbo_name = str;
+		slen = strlen(str) - 4;
+		str = strndup(package_node->load_image_dtbo_name, slen);
+		str[slen - 1] = '\0';
+		package_node->package_name = str;
+		copy_file_to_firmware(dfx_dtbo_file);
+	} else {
+		return -DFX_READ_PACKAGE_ERROR;
+	}
+
+	if(dfx_driver_dtbo_file != NULL) {
+		package_node->load_drivers_dtbo_path = strdup(dfx_driver_dtbo_file);
+		str = strdup(get_file_name_from_path(package_node->load_drivers_dtbo_path));
+		package_node->load_drivers_dtbo_name = str;
+		copy_file_to_firmware(dfx_driver_dtbo_file);
+	} else {
+		package_node->load_drivers_dtbo_path = NULL;
+		package_node->load_drivers_dtbo_name = NULL;
+	}
+
+	if (dfx_aes_key_file != NULL) {
+		package_node->load_aes_file_path = strdup(dfx_aes_key_file);
+		str = strdup(get_file_name_from_path(package_node->load_aes_file_path));
+		package_node->load_aes_file_name = str;
+	} else {
+		package_node->load_aes_file_path = NULL;
+		package_node->load_aes_file_name = NULL;
+	}
+
+	return 0;
+}
+
+static char *get_file_name_from_path(char *full_path)
+{
+	char *ssc;
+	int l = 0;
+	char *path = full_path;
+
+	ssc = strstr(path, "/");
+	do{
+		l = strlen(ssc) + 1;
+		path = &path[strlen(path)-l+2];
+		ssc = strstr(path, "/");
+	}while(ssc);
+
+	return path;
+}
+
+static void copy_file_to_firmware(const char *file)
+{
+	char command[MAX_CMD_LEN];
+
+	snprintf(command, sizeof(command), "cp %s /lib/firmware/", file);
+	system(command);
+}
+
+static bool file_exists(const char *filename)
+{
+    FILE *fp = fopen(filename, "r");
+    bool is_exist = false;
+    if (fp != NULL)
+    {
+        is_exist = true;
+        fclose(fp); // close the file
+    }
+    return is_exist;
+}
+
+static int validate_input_files(const char *dfx_bin_file,
+				const char *dfx_dtbo_file,
+				const char *dfx_driver_dtbo_file,
+				const char *dfx_aes_key_file,
+				unsigned long flags)
+{
+        int len, ret = 0;
+
+        /* Validate Inputs */
+	len = strlen(dfx_bin_file);
+	if ((strcmp(dfx_bin_file + (len - 4), ".bit")) &&
+	    (strcmp(dfx_bin_file + (len - 4), ".bin")) &&
+            (strcmp(dfx_bin_file + (len - 4), ".pdi"))) {
+		printf("%s: Invalid bitstream file extension\r\n", __func__);
+		printf("%s: File extension should be .bit (or) .bin (or) .pdi\n", __func__);
+		return -DFX_INVALID_PARAM;
+	}
+
+	if (!file_exists(dfx_bin_file)) {
+		printf("%s: User provided bitstream file doesn't exist\r\n", __func__);
+		return -DFX_INVALID_PARAM;
+	}
+
+	len = strlen(dfx_dtbo_file);
+	if (strcmp(dfx_dtbo_file + (len - 5), ".dtbo")) {
+		printf("%s: Invalid Overlay file extension\r\n", __func__);
+		printf("%s: File extension should be .dtbo\n", __func__);
+		return -DFX_INVALID_PARAM;
+	}
+
+	if (!file_exists(dfx_dtbo_file)) {
+		printf("%s: User provided Overlay file doesn't exist\r\n", __func__);
+		return -DFX_INVALID_PARAM;
+	}
+
+	if (dfx_driver_dtbo_file != NULL) {
+		len = strlen(dfx_driver_dtbo_file);
+		if (strcmp(dfx_driver_dtbo_file + (len - 5), ".dtbo")) {
+			printf("%s: Invalid PL IP's Overlay file extension\r\n", __func__);
+			printf("%s: File extension should be .dtbo\n", __func__);
+			return -DFX_INVALID_PARAM;
+		}
+
+		if (!file_exists(dfx_driver_dtbo_file)) {
+			printf("%s: User provided PL IP's Overlay file doesn't exist\r\n", __func__);
+			return -DFX_INVALID_PARAM;
+		}
+	}
+
+	if (flags & DFX_ENCRYPTION_USERKEY_EN) {
+		len = strlen(dfx_aes_key_file);
+		if (strcmp(dfx_aes_key_file + (len - 4), ".nky")) {
+			printf("%s: Invalid AES key file extension\r\n", __func__);
+			printf("%s: File extension should be .nky\n", __func__);
+			return -DFX_INVALID_PARAM;
+		}
+
+		if (!file_exists(dfx_aes_key_file)) {
+			printf("%s: User provided AES key file doesn't exist\r\n", __func__);
+			return -DFX_INVALID_PARAM;
+		}
+	}
 }
 
 #ifdef ENABLE_LIBDFX_TIME

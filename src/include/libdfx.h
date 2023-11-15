@@ -28,6 +28,7 @@
 #define DFX_DESTROY_PACKAGE_ERROR		(0xEU)
 #define DFX_FAIL_TO_OPEN_BIN_FILE		(0xFU)
 #define DFX_INSUFFICIENT_MEM			(0x10U)
+#define DFX_INVALID_PARAM			(0x11U)
 
 /* XILFPGA/PMUFW Error Codes */
 #define XFPGA_ERROR_CSUDMA_INIT_FAIL		(0x2U)
@@ -77,5 +78,7 @@ int dfx_cfg_remove(int package_id);
 int dfx_cfg_destroy(int package_id);
 int dfx_get_active_uid_list(int *buffer);
 int dfx_get_meta_header(char *binfile, int *buffer, int buf_size);
-
+int dfx_cfg_init_file(const char *dfx_bin_file, const char *dfx_dtbo_file,
+		      const char *dfx_driver_dtbo_file, const char *dfx_aes_key_file,
+		      const char *devpath, unsigned long flags);
 #endif
