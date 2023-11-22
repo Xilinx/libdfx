@@ -215,6 +215,74 @@ package_id2 = dfx_cfg_init ("/path/package2/", "/dev/fpga0", flags);
 
 /* More code */
 
+=============================================================================
+ -pre-fetch int dfx_cfg_init_file(const char *dfx_bin_file,
+				  const char *dfx_dtbo_file,
+				  const char *dfx_driver_dtbo_file,
+				  const char *dfx_aes_key_file,
+				  const char *devpath, unsigned long flags);
+=============================================================================
+
+/* Provide a generic interface to the user to specify the required parameters
+ * for FPGA programming. To pass the required inputs user should provide the
+ * absolute file paths.
+ * The calling process must call this API before it performs -load/remove.
+ *
+ * const char *dfx_bin_file: Absolute pdi/bistream file path.
+ *The one user wants to load.
+ *		-Ex:/lib/firmware/xilinx/example/example.pdi
+ *
+ * const char *dfx_dtbo_file: Absolute relevant dtbo file path
+ *		-Ex: /lib/firmware/xilinx/example/example.dtbo
+ *
+ * const char *dfx_driver_dtbo_file: Absolute relevant dtbo file path
+ *		- Ex: /lib/firmware/xilinx/example/drivers.dtbo (or) NULL
+ * Note: To use the deferred probe functionality Both Image DTBO and relevant
+ * Drivers DTBO files are mandatory for other use cases user should pass "NULL".
+ *
+ * char *dfx_aes_key_file: Absolute relevant aes key file path
+ * 		Ex: /lib/firmware/xilinx/example/Aes_key.nky (or) NULL
+ * Note: If the bitstream is encrypted with the user-key then the user needs to
+ * pass relevant aes_key.key file for other use cases user should pass "NULL".
+ *
+ * char *devpath: The dev interface is exposed at /dev/fpga-deviceN.
+ * Where N is the interface-device number.
+ *
+ * unsigned long flags: Flags to specify any special instructions for the
+ * library to perform.
+ *
+ * Return: returns unique package_Id or Error code on failure.
+ */
+
+
+Usage example:
+#include "libdfx.h"
+
+ package_id1, package_id2, package_id3
+
+/* More code */
+/* -store /Pre-fetch data  - For Normal Images*/
+package_id1 = dfx_cfg_init_file("/lib/firmware/xilinx/example/example.bin ",
+				"/lib/firmware/xilinx/example/ex/ample.dtbo",
+				NULL, NULL, /dev/fpga0", flags);
+
+/* More code */
+
+/* -store /Pre-fetch data  - For user-key encrypted bitstream use case*/
+package_id2 = dfx_cfg_init_file("/lib/firmware/xilinx/example/example.bin ",
+				"/lib/firmware/xilinx/example/ex/ample.dtbo",
+				NULL, "/lib/firmware/xilinx/example/Aes_key.nky",
+				/dev/fpga0", flags);
+
+/* More code */
+
+/* -store /Pre-fetch data  - For deferred drivers probe use case*/
+package_id3 = dfx_cfg_init_file("/lib/firmware/xilinx/example/example.bin ",
+				"/lib/firmware/xilinx/example/ex/pl_only_config.dtbo",
+				"/lib/firmware/xilinx/example/drivers.dtbo", NULL,
+				/dev/fpga0", flags);
+/* More code */
+
 ================================================================
  -fpga-load:  int dfx_cfg_load(struct dfx_package_Id package_Id)
 ================================================================
