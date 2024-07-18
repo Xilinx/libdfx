@@ -688,8 +688,7 @@ END:
 
 static int read_package_folder(struct dfx_package_node *package_node)
 {
-	bool is_image_dtbo = false, is_dtbo = false;
-	bool is_bin = false, is_bit = false;
+	int bin_count = 0, dtbo_count = 0, driver_dtbo_count = 0, nky_count = 0;
 	char command[MAX_CMD_LEN];
 	struct dirent *dir;
 	int len, pcklen;
@@ -725,7 +724,7 @@ static int read_package_folder(struct dfx_package_node *package_node)
 								sizeof(char));
 					strcpy(str, dir->d_name);
 					package_node->load_image_name = str;
-					is_bin = true;
+					bin_count++;
 				} else if ((!strcmp(file_name + (len - 4),
 					   ".bit")) && package_node->xilplatform
 					   == ZYNQMP_PLATFORM) {
@@ -739,7 +738,7 @@ static int read_package_folder(struct dfx_package_node *package_node)
 							sizeof(char));
 					strcpy(str, dir->d_name);
 					package_node->load_image_name = str;
-					is_bit = true;
+					bin_count++;
 				} else if (!strcmp(file_name + (len - 7),
 								"_i.dtbo")) {
 					str = (char *) calloc(
@@ -754,7 +753,7 @@ static int read_package_folder(struct dfx_package_node *package_node)
 					strcpy(str, dir->d_name);
 					package_node->load_image_dtbo_name =
 									str;
-					is_image_dtbo = true;
+					dtbo_count++;
 				} else if (!strcmp(file_name + (len - 7),
 					   "_d.dtbo")) {
 					str = (char *) calloc(
@@ -769,6 +768,7 @@ static int read_package_folder(struct dfx_package_node *package_node)
 					strcpy(str, dir->d_name);
 					package_node->load_drivers_dtbo_name =
 									str;
+					driver_dtbo_count++;
 				} else if (!strcmp(file_name + (len - 5),
 								".dtbo")) {
 					str = (char *) calloc(
@@ -783,7 +783,7 @@ static int read_package_folder(struct dfx_package_node *package_node)
 					strcpy(str, dir->d_name);
 					package_node->load_image_dtbo_name =
 									str;
-					is_dtbo = true;
+					dtbo_count++;
 				} else if (!strcmp(file_name + (len - 4),
 								".nky")) {
 					str = (char *) calloc(
@@ -796,6 +796,7 @@ static int read_package_folder(struct dfx_package_node *package_node)
 							sizeof(char));
 					strcpy(str, dir->d_name);
 					package_node->load_aes_file_name = str;
+					nky_count++;
 				}
 			}
 			free(file_name);
@@ -803,10 +804,29 @@ static int read_package_folder(struct dfx_package_node *package_node)
 		closedir(FD);
 	}
 
-	if (is_bit == true && is_bin == true)
+	if (bin_count > 1) {
+		printf("libdfx: Error: %s* has multiple Bitstream files!\n",
+		       package_node->package_path);
 		return -DFX_DUPLICATE_FIRMWARE_ERROR;
-	if (is_image_dtbo == true && is_dtbo == true)
+	}
+
+	if (dtbo_count > 1) {
+		printf("libdfx: Error: %s* has multiple overlay files!\n",
+		       package_node->package_path);
 		return -DFX_DUPLICATE_DTBO_ERROR;
+	}
+
+	if (driver_dtbo_count > 1) {
+		printf("libdfx: warning: %s* has multiple Drivers overlay files(Deferred probe)!\n",
+		       package_node->package_path);
+		return -DFX_DUPLICATE_DRIVERS_DTBO_ERROR;
+	}
+
+	if (nky_count > 1) {
+		printf("libdfx: warning: %s* has multiple AES key files!\n",
+		       package_node->package_path);
+		return -DFX_DUPLICATE_AES_KEY_ERROR;
+	}
 
 	if (package_node->load_image_dtbo_path != NULL) {
 		len = strlen(package_node->load_image_dtbo_path);
