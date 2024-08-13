@@ -16,6 +16,10 @@ supports the FPGA device, the library abstracts away hardware specific details
 ============
 Limitations:
 ============
+	->Libdfx is currently limited to supporting Zynq UltraScale+ MPSoC and
+Versal platforms
+	->Input package/folder should contain only one bitstream/PDI image file
+and its relevant overlay file
 	->To use the deferred probe functionality Both Image DTBO and relevant
 Drivers DTBO files are mandatory
 		->The Image dtbo file extension should be _i.dtbo 

@@ -37,4 +37,6 @@ Once the build is successfully completed the library static, shared object files
 
 -build/apps/dfx_app
 
+Note: Libdfx is currently limited to supporting Zynq UltraScale+ MPSoC and Versal platforms.
+
 For more information refer doc/README.txt.
