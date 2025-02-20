@@ -1384,7 +1384,7 @@ static int validate_input_files(const char *dfx_bin_file,
 				const char *dfx_aes_key_file,
 				unsigned long flags)
 {
-        int len, ret = 0;
+        int len;
 
         /* Validate Inputs */
 	len = strlen(dfx_bin_file);
@@ -1440,6 +1440,8 @@ static int validate_input_files(const char *dfx_bin_file,
 			return -DFX_INVALID_PARAM;
 		}
 	}
+
+	return 0;
 }
 
 #ifdef ENABLE_LIBDFX_TIME
