@@ -20,12 +20,16 @@
 static int open_device (int *devfd)
 {
 	*devfd = open("/dev/dma_heap/reserved", O_RDWR);
-	if (*devfd < 0) {
-                printf("%s: Failed to open device\n", __func__);
-                return -1;
-        }
+	if (*devfd >= 0) {
+		return 0;
+	} else {
+		*devfd = open("/dev/dma_heap/cma_reserved@800000000", O_RDWR);
+		if (*devfd >= 0) {
+			return 0;
+		}
+	}
 
-	return 0;
+	return -1;
 }
 
 static int alloc_dma_buffer(struct dma_buffer_info *dma_data)
