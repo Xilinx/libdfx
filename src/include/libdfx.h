@@ -73,7 +73,8 @@
 
 
 int dfx_cfg_init(const char *dfx_package_path,
-                  const char *devpath, unsigned long flags);
+		 const char *devpath, unsigned long flags,
+		 ...);
 int dfx_cfg_load(int package_id);
 int dfx_cfg_drivers_load(int package_id);
 int dfx_cfg_remove(int package_id);
@@ -82,5 +83,5 @@ int dfx_get_active_uid_list(int *buffer);
 int dfx_get_meta_header(char *binfile, int *buffer, int buf_size);
 int dfx_cfg_init_file(const char *dfx_bin_file, const char *dfx_dtbo_file,
 		      const char *dfx_driver_dtbo_file, const char *dfx_aes_key_file,
-		      const char *devpath, unsigned long flags);
+		      const char *devpath, unsigned long flags, ...);
 #endif

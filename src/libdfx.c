@@ -8,6 +8,7 @@
 #include <dirent.h>
 #include <fcntl.h>
 #include <libgen.h>
+#include <stdarg.h>
 #include <stdbool.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -111,15 +112,17 @@ static struct dfx_package_node *get_package(int package_id);
 static int destroy_package(int package_id);
 static int read_package_folder(struct dfx_package_node *package_node);
 static int dfx_state(char *cmd, char *state);
-static int dfx_package_load_dmabuf(struct dfx_package_node *package_node);
+static int dfx_package_load_dmabuf(struct dfx_package_node *package_node,
+				   const char *cma_file);
 static int dfx_getplatform(void);
 static int find_key(struct dfx_package_node *package_node);
 static int lengthOfLastWord2(const char *input);
 static void strlwr(char *destination, const char *source);
 static int dfx_get_error(char *cmd);
 static void zynqmp_print_err_msg(int err);
-static int dfx_cfg_init_common(const char *dfx_package_path, const char *dfx_bin_file,
-			       const char *dfx_dtbo_file, const char *dfx_driver_dtbo_file,
+static int dfx_cfg_init_common(const char *dfx_package_path, const char *cma_file,
+			       const char *dfx_bin_file, const char *dfx_dtbo_file,
+			        const char *dfx_driver_dtbo_file,
 			       const char *dfx_aes_key_file, const char *devpath,
 			       unsigned long flags);
 static int read_package_byname(struct dfx_package_node *package_node,
@@ -149,13 +152,21 @@ static inline double gettime(struct timeval  t0, struct timeval t1);
  *                      where N is the interface-device number.
  * unsigned long flags: Flags to specify any special instructions for library
  *			to perform.
+ * Optional parameters (using variadic arguments):
+ * char *cma_file: (Optional) Custom CMA file path for DMA buffer allocation.
+ *                 If NULL or not provided, defaults to standard paths:
+ *                 "/dev/dma_heap/reserved" or "/dev/dma_heap/cma_reserved@800000000"
  *
  * Return: returns unique package_Id, or Error code on failure.
  */
 int dfx_cfg_init(const char *dfx_package_path,
-		  const char *devpath, unsigned long flags)
+                 const char *devpath, unsigned long flags,
+                 ...)
 {
 	int ret = 0;
+	va_list args;
+	const char *cma_file = NULL;
+
 #ifdef ENABLE_LIBDFX_TIME
 	struct timeval t1, t0;
 	double time;
@@ -168,8 +179,15 @@ int dfx_cfg_init(const char *dfx_package_path,
 		return -DFX_INVALID_PARAM;
 	}
 
-	ret = dfx_cfg_init_common(dfx_package_path, NULL, NULL, NULL, NULL,
-				  devpath, flags);
+	va_start(args, flags);
+
+	// Attempt to fetch next arg (optional cma_file)
+	cma_file = va_arg(args, const char *);
+
+	va_end(args);
+
+	ret = dfx_cfg_init_common(dfx_package_path, cma_file,  NULL, NULL,
+				  NULL, NULL, devpath, flags);
 
 #ifdef ENABLE_LIBDFX_TIME
 	gettimeofday(&t1, NULL);
@@ -203,6 +221,11 @@ int dfx_cfg_init(const char *dfx_package_path,
  * char *devpath: The dev interface is exposed at /dev/fpga-deviceN.
  * Where N is the interface-device number.
  *
+ * Optional parameters (using variadic arguments):
+ * char *cma_file: (Optional) Custom CMA file path for DMA buffer allocation.
+ *                 If NULL or not provided, defaults to standard paths:
+ *                 "/dev/dma_heap/reserved" or "/dev/dma_heap/cma_reserved@800000000"
+ *
  * unsigned long flags: Flags to specify any special instructions for the
  * library to perform.
  *
@@ -210,9 +233,11 @@ int dfx_cfg_init(const char *dfx_package_path,
  */
 int dfx_cfg_init_file(const char *dfx_bin_file, const char *dfx_dtbo_file,
 		      const char *dfx_driver_dtbo_file, const char *dfx_aes_key_file,
-		      const char *devpath, unsigned long flags)
+		      const char *devpath, unsigned long flags, ...)
 {
+	va_list args;
 	int len, ret = 0;
+	const char *cma_file = NULL;
 #ifdef ENABLE_LIBDFX_TIME
 	struct timeval t1, t0;
 	double time;
@@ -228,7 +253,14 @@ int dfx_cfg_init_file(const char *dfx_bin_file, const char *dfx_dtbo_file,
 		return ret;
 	}
 
-	ret = dfx_cfg_init_common(NULL, dfx_bin_file, dfx_dtbo_file,
+	va_start(args, flags);
+
+	// Attempt to fetch next arg (optional cma_file)
+	cma_file = va_arg(args, const char *);
+
+	va_end(args);
+
+	ret = dfx_cfg_init_common(NULL, cma_file, dfx_bin_file, dfx_dtbo_file,
 				  dfx_driver_dtbo_file, dfx_aes_key_file,
 				  devpath, flags);
 #ifdef ENABLE_LIBDFX_TIME
@@ -1013,7 +1045,8 @@ static int dfx_get_error(char *cmd)
     return (int)strtol(string, NULL, 0);
 }
 
-static int dfx_package_load_dmabuf(struct dfx_package_node *package_node)
+static int dfx_package_load_dmabuf(struct dfx_package_node *package_node,
+				   const char *cma_file)
 {
 	int word_align = 0, index, fd, ret;
 	struct dma_buf_sync sync = { 0 };
@@ -1044,6 +1077,7 @@ static int dfx_package_load_dmabuf(struct dfx_package_node *package_node)
 	package_node->dmabuf_info = (struct dma_buffer_info *) calloc(1,
 					sizeof(struct dma_buffer_info));
 	package_node->dmabuf_info->dma_buflen = fileLen;
+	package_node->dmabuf_info->cma_file = cma_file;
 
 	/* This call will do the following things
 	 *   1. Allocate memory from the DMA pool and return a valid buffer fd
@@ -1207,9 +1241,12 @@ static void zynqmp_print_err_msg(int err)
 		printf("\r\n");
 }
 
-static int dfx_cfg_init_common(const char *dfx_package_path, const char *dfx_bin_file,
-			       const char *dfx_dtbo_file, const char *dfx_driver_dtbo_file,
-			       const char *dfx_aes_key_file, const char *devpath,
+static int dfx_cfg_init_common(const char *dfx_package_path,
+			       const char *cma_file, const char *dfx_bin_file,
+			       const char *dfx_dtbo_file,
+			       const char *dfx_driver_dtbo_file,
+			       const char *dfx_aes_key_file,
+			       const char *devpath,
 			       unsigned long flags)
 {
 	FPGA_NODE *package_node;
@@ -1272,7 +1309,7 @@ static int dfx_cfg_init_common(const char *dfx_package_path, const char *dfx_bin
 	}
 
 	if (!(flags & DFX_EXTERNAL_CONFIG_EN)) {
-		ret = dfx_package_load_dmabuf(package_node);
+		ret = dfx_package_load_dmabuf(package_node, cma_file);
 		if (ret) {
 			printf("%s: load dmabuf failed\r\n", __func__);
 			goto destroy_package;

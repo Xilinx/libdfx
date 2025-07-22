@@ -17,20 +17,41 @@
 #include "dmabuf_alloc.h"
 #include "dma-heap.h"
 
-static int open_device (int *devfd)
+#include <stdio.h>
+#include <fcntl.h>
+#include <unistd.h>
+
+static int open_device(const char *cma_file, int *devfd)
 {
-	*devfd = open("/dev/dma_heap/reserved", O_RDWR);
-	if (*devfd >= 0) {
-		return 0;
-	} else {
-		*devfd = open("/dev/dma_heap/cma_reserved@800000000", O_RDWR);
-		if (*devfd >= 0) {
-			return 0;
-		}
+	if (!devfd) {
+		printf("%s: Invalid devfd pointer\n", __func__);
+		return -1;
 	}
+
+	// Try user-provided file if available
+	if (cma_file != NULL) {
+		*devfd = open(cma_file, O_RDWR);
+		if (*devfd >= 0)
+			return 0;
+	}
+
+	// Try default device paths
+	const char *fallback_paths[] = {
+			"/dev/dma_heap/reserved",
+			"/dev/dma_heap/cma_reserved@800000000"
+	};
+
+	for (int i = 0; i < sizeof(fallback_paths)/sizeof(fallback_paths[0]); ++i) {
+		*devfd = open(fallback_paths[i], O_RDWR);
+		if (*devfd >= 0)
+			return 0;
+	}
+
+	printf("%s: Failed to open any device\n", __func__);
 
 	return -1;
 }
+
 
 static int alloc_dma_buffer(struct dma_buffer_info *dma_data)
 {
@@ -84,7 +105,7 @@ int export_dma_buffer(struct dma_buffer_info *dma_data)
 		return -1;
 	}
 
-	ret = open_device(&devfd);
+	ret = open_device(dma_data->cma_file, &devfd);
 	if (ret)
 		return ret;
 

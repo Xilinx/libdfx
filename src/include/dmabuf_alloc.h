@@ -14,6 +14,7 @@
 struct dma_buffer_info {
 	int devfd;
 	int dma_buffd;
+	const char *cma_file;
 	unsigned char *dma_buffer;
 	unsigned long dma_buflen;
 };
