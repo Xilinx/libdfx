@@ -178,10 +178,31 @@ removed at run-time.
 API Details:
 ============
 
-==============================================================
+=================
+CMA File Support:
+=================
+        libdfx now supports optional custom CMA (Contiguous Memory Allocator) file
+specification for DMA buffer allocation. This feature provides flexibility for
+different platform configurations and reserved memory setups.
+
+Default DMA Heap Paths:
+        - /dev/dma_heap/reserved
+        - /dev/dma_heap/cma_reserved@800000000
+
+Custom CMA File Usage:
+        - Users can specify a custom CMA file path as an optional parameter
+        - If provided, libdfx will attempt to use the custom path first
+        - If the custom path fails, it falls back to default paths
+        - This allows for platform-specific memory configurations
+
+Examples of custom CMA paths:
+        - /dev/dma_heap/custom_cma
+        - /dev/dma_heap/cma_reserved@specific_address
+        - /dev/dma_heap/platform_specific_heap
+=================================================================
  -pre-fetch:  dfx_cfg_init (const char *dfx_package_path,
-			     const char *devpath, u32 flags);
-==============================================================
+			    const char *devpath, u32 flags, ...);
+=================================================================
 
 /* Provide a generic interface to the user to specify the required parameters
  * for PR programming.
@@ -198,6 +219,11 @@ API Details:
  *
  * unsigned long flags: Flags to specify any special instructions for library
  * to perform.
+ *
+ * Optional parameters (using variadic arguments):
+ * char *cma_file: (Optional) Custom CMA file path for DMA buffer allocation.
+ *                 If NULL or not provided, defaults to standard paths:
+ *                 "/dev/dma_heap/reserved" or "/dev/dma_heap/cma_reserved@800000000"
  *
  * Return: returns unique package_Id or Error code on failure.
  */ 
@@ -219,12 +245,19 @@ package_id2 = dfx_cfg_init ("/path/package2/", "/dev/fpga0", flags);
 
 /* More code */
 
+/* -store /Pre-fetch data  - For custom CMA file use case*/
+package_id3 = dfx_cfg_init ("/path/package3/", "/dev/fpga0", flags,
+                            "/dev/dma_heap/custom_cma");
+
+/* More code */
+
 =============================================================================
  -pre-fetch int dfx_cfg_init_file(const char *dfx_bin_file,
 				  const char *dfx_dtbo_file,
 				  const char *dfx_driver_dtbo_file,
 				  const char *dfx_aes_key_file,
-				  const char *devpath, unsigned long flags);
+				  const char *devpath,
+                                  unsigned long flags, ...);
 =============================================================================
 
 /* Provide a generic interface to the user to specify the required parameters
@@ -254,6 +287,11 @@ package_id2 = dfx_cfg_init ("/path/package2/", "/dev/fpga0", flags);
  *
  * unsigned long flags: Flags to specify any special instructions for the
  * library to perform.
+ *
+ * Optional parameters (using variadic arguments):
+ * char *cma_file: (Optional) Custom CMA file path for DMA buffer allocation.
+ *                 If NULL or not provided, defaults to standard paths:
+ *                 "/dev/dma_heap/reserved" or "/dev/dma_heap/cma_reserved@800000000"
  *
  * Return: returns unique package_Id or Error code on failure.
  */
@@ -285,6 +323,13 @@ package_id3 = dfx_cfg_init_file("/lib/firmware/xilinx/example/example.bin ",
 				"/lib/firmware/xilinx/example/ex/pl_only_config.dtbo",
 				"/lib/firmware/xilinx/example/drivers.dtbo", NULL,
 				/dev/fpga0", flags);
+/* More code */
+
+/* -store /Pre-fetch data  - For custom CMA file use case*/
+package_id4 = dfx_cfg_init_file("/lib/firmware/xilinx/example/example.bin ",
+                                "/lib/firmware/xilinx/example/example.dtbo",
+                                NULL, NULL, "/dev/fpga0", flags,
+                                "/dev/dma_heap/custom_cma");
 /* More code */
 
 ================================================================
