@@ -17,9 +17,23 @@
 #include "dmabuf_alloc.h"
 #include "dma-heap.h"
 
+#include <dirent.h>
+#include <string.h>
 #include <stdio.h>
 #include <fcntl.h>
 #include <unistd.h>
+
+static int is_cma_default_node(const char *node_name)
+{
+	char path[512];
+
+	snprintf(path, sizeof(path),
+		 "/sys/firmware/devicetree/base/reserved-memory/%s/linux,cma-default",
+		 node_name);
+
+	/* returns 1 if property exists, 0 if not */
+	return (access(path, F_OK) == 0);
+}
 
 static int open_device(const char *cma_file, int *devfd)
 {
@@ -28,30 +42,48 @@ static int open_device(const char *cma_file, int *devfd)
 		return -1;
 	}
 
-	// Try user-provided file if available
+	// Try user-provided heap path first
 	if (cma_file != NULL) {
 		*devfd = open(cma_file, O_RDWR);
 		if (*devfd >= 0)
 			return 0;
 	}
 
-	// Try default device paths
-	const char *fallback_paths[] = {
-			"/dev/dma_heap/reserved",
-			"/dev/dma_heap/cma_reserved@800000000"
-	};
+	// Try default kernel reserved CMA heap
+	*devfd = open("/dev/dma_heap/reserved", O_RDWR);
+	if (*devfd >= 0)
+		return 0;
 
-	for (int i = 0; i < sizeof(fallback_paths)/sizeof(fallback_paths[0]); ++i) {
-		*devfd = open(fallback_paths[i], O_RDWR);
-		if (*devfd >= 0)
-			return 0;
+	// Dynamic scan for cma_reserved@* that also has linux,cma-default
+	DIR *dir = opendir("/dev/dma_heap");
+	if (dir) {
+		struct dirent *entry;
+		while ((entry = readdir(dir)) != NULL) {
+			if (strncmp(entry->d_name, "cma_reserved@", 13) == 0) {
+
+				// Check if the DT node has the linux,cma-default flag
+				if (!is_cma_default_node(entry->d_name))
+					continue;
+
+				char path[256];
+				snprintf(path, sizeof(path),
+					 "/dev/dma_heap/%s", entry->d_name);
+
+				*devfd = open(path, O_RDWR);
+
+				if (*devfd >= 0) {
+					closedir(dir);
+					return 0;
+				}
+			}
+		}
+		closedir(dir);
 	}
 
-	printf("%s: Failed to open any device\n", __func__);
+	printf("%s: No valid CMA heap found\n", __func__);
 
 	return -1;
 }
-
 
 static int alloc_dma_buffer(struct dma_buffer_info *dma_data)
 {
