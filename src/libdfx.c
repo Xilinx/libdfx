@@ -130,7 +130,6 @@ static int read_package_byname(struct dfx_package_node *package_node,
 			       const char *dfx_driver_dtbo_file,
 			       const char *dfx_aes_key_file);
 static char *get_file_name_from_path(char *full_path);
-static void copy_file_to_firmware(const char *file);
 static int validate_input_files(const char *dfx_bin_file, const char *dfx_dtbo_file,
 				const char *dfx_driver_dtbo_file, const char *dfx_aes_key_file,
 				unsigned long flags);
@@ -336,6 +335,8 @@ int dfx_cfg_load(int package_id)
 		 "/sys/kernel/config/device-tree/overlays/%s_image_%lu",
 		 package_node->package_name, package_node->package_id);
 
+	dfx_set_firmware_search_path(package_node->load_image_path);
+
 	len = strlen(command) + 1;
 	str = (char *) calloc((len), sizeof(char));
 	strncpy(str, command, len);
@@ -370,6 +371,7 @@ int dfx_cfg_load(int package_id)
 				zynqmp_print_err_msg(err);
 			system(command);
 			ret = -DFX_IMAGE_CONFIG_ERROR;
+			dfx_set_firmware_search_path("");
 			goto END;
 		}
 	}
@@ -382,8 +384,8 @@ int dfx_cfg_load(int package_id)
 			 package_node->load_image_overlay_pck_path);
 		system(command);
 		printf("%s: Image configuration failed\n", __func__);
+		dfx_set_firmware_search_path("");
 		ret = -DFX_IMAGE_CONFIG_ERROR;
-		goto END;
 	}
 
 END:
@@ -434,6 +436,10 @@ int dfx_cfg_drivers_load(int package_id)
 		goto END;
 	}
 
+	// This may not be neccessary - this approach should use the dma buffer
+	// TODO(artiepoole): check this is necessary
+	dfx_set_firmware_search_path(package_node->load_drivers_dtbo_path);
+
 	snprintf(command, sizeof(command),
 		 "/sys/kernel/config/device-tree/overlays/%s_driver_%lu",
 		 package_node->package_name, package_node->package_id);
@@ -457,6 +463,7 @@ int dfx_cfg_drivers_load(int package_id)
 			 package_node->load_drivers_overlay_pck_path);
 		system(command);
 		printf("%s: Drivers DTBO config failed\n", __func__);
+		dfx_set_firmware_search_path("");
 		ret = -DFX_DRIVER_CONFIG_ERROR;
 	}
 
@@ -559,12 +566,6 @@ int dfx_cfg_destroy(int package_id)
 		printf("%s: fail to get package_node\n", __func__);
 		ret = -DFX_GET_PACKAGE_ERROR;
 		goto END;
-	}
-
-	if (package_node->load_image_overlay_pck_path != NULL) {
-		snprintf(command, sizeof(command), "rm /lib/firmware/%s",
-			 package_node->load_image_dtbo_name);
-		system(command);
 	}
 
 	if (!(package_node->flags & DFX_EXTERNAL_CONFIG_EN)) {
@@ -671,14 +672,7 @@ int dfx_get_meta_header(char *binfile, int *buffer, int buf_size)
 	}
 	fclose(fd);
 
-	FD = opendir("/lib/firmware");
-	if (FD)
-		closedir(FD);
-	else
-		system("mkdir -p /lib/firmware");
-
-	snprintf(command, sizeof(command), "cp %s /lib/firmware", binfile);
-	system(command);
+	dfx_set_firmware_search_path(binfile);
 	tmp = strdup(binfile);
 	while((token = strsep(&tmp, "/")))
 		tmp1 = token;
@@ -715,6 +709,7 @@ END:
 	time = gettime(t0, t1);
 	printf("%s API Time taken: %f Milli Seconds\n\r", __func__, time);
 #endif
+	dfx_set_firmware_search_path("");
 	return ret;
 }
 
@@ -871,16 +866,6 @@ static int read_package_folder(struct dfx_package_node *package_node)
 		str = (char *) calloc((len), sizeof(char));
 		strncpy(str, command, len);
 		package_node->package_name = str;
-		snprintf(command, sizeof(command), "cp %s /lib/firmware/",
-			 package_node->load_image_dtbo_path);
-		system(command);
-
-		if (package_node->load_drivers_dtbo_path != NULL) {
-			snprintf(command, sizeof(command),
-				 "cp %s /lib/firmware/",
-				 package_node->load_drivers_dtbo_path);
-			system(command);
-		}
 	} else {
 		printf("%s: Invalid package\n", __func__);
 		return -DFX_READ_PACKAGE_ERROR;
@@ -893,12 +878,6 @@ static struct dfx_package_node *create_package()
 {
 	FPGA_NODE *package_node;
 	DIR *FD;
-
-	FD = opendir("/lib/firmware");
-	if (FD)
-		closedir(FD);
-	else
-		system("mkdir -p /lib/firmware");
 
 	FD = opendir("/sys/kernel/config/device-tree/overlays/");
 	if (FD)
@@ -1338,7 +1317,7 @@ static int read_package_byname(struct dfx_package_node *package_node,
 		package_node->load_image_path = strdup(dfx_bin_file);
 		str = strdup(get_file_name_from_path(package_node->load_image_path));
 		package_node->load_image_name = str;
-		copy_file_to_firmware(dfx_bin_file);
+		dfx_set_firmware_search_path(dfx_bin_file);
 	} else {
 		return -DFX_READ_PACKAGE_ERROR;
 	}
@@ -1351,7 +1330,7 @@ static int read_package_byname(struct dfx_package_node *package_node,
 		str = strndup(package_node->load_image_dtbo_name, slen);
 		str[slen - 1] = '\0';
 		package_node->package_name = str;
-		copy_file_to_firmware(dfx_dtbo_file);
+		dfx_set_firmware_search_path(dfx_dtbo_file);
 	} else {
 		return -DFX_READ_PACKAGE_ERROR;
 	}
@@ -1360,7 +1339,7 @@ static int read_package_byname(struct dfx_package_node *package_node,
 		package_node->load_drivers_dtbo_path = strdup(dfx_driver_dtbo_file);
 		str = strdup(get_file_name_from_path(package_node->load_drivers_dtbo_path));
 		package_node->load_drivers_dtbo_name = str;
-		copy_file_to_firmware(dfx_driver_dtbo_file);
+		dfx_set_firmware_search_path(dfx_driver_dtbo_file);
 	} else {
 		package_node->load_drivers_dtbo_path = NULL;
 		package_node->load_drivers_dtbo_name = NULL;
@@ -1394,12 +1373,75 @@ static char *get_file_name_from_path(char *full_path)
 	return path;
 }
 
-static void copy_file_to_firmware(const char *file)
+/**
+ * Extract the parent dir of the target path, and write that location to
+ * /sys/module/firmware_class/parameters/path so that the kernel can discover
+ * the firmware within
+ *
+ * @param file_path the full path to the file to be loaded
+ *
+ * Return:	0 on success
+ *			-1 on failure
+ */
+int dfx_set_firmware_search_path(const char *file_path)
 {
-	char command[MAX_CMD_LEN];
+	char path_copy[512];
+	char *parent_dir;
+	int fd = -1;
+	int rc = -1;
+	const char *lookup_control =
+		"/sys/module/firmware_class/parameters/path";
 
-	snprintf(command, sizeof(command), "cp %s /lib/firmware/", file);
-	system(command);
+	if (!file_path) {
+		printf("%s: ERROR: path provided is NULL\n", __func__);
+		goto END;
+	}
+
+	if (strlen(file_path) >= sizeof(path_copy)) {
+		printf("%s: WARN: path provided is too long, truncating\n", __func__);
+	}
+
+	strlcpy(path_copy, file_path, sizeof(path_copy));
+	if (file_path[0]) {
+		printf("%s: Setting lookup path for `%s`\n", __func__, file_path);
+	}
+
+	// derive parent directory
+	parent_dir = dirname(path_copy);
+	if (!strcmp(".", parent_dir)) {
+		parent_dir = "";
+	}
+
+	fd = open(lookup_control, O_WRONLY);
+	if (fd < 0) {
+		printf("%s: ERROR: failed to open firmware path parameter\n", __func__);
+		goto END;
+	}
+
+	printf("%s: writing `%s` to %s\n", __func__, parent_dir, lookup_control);
+	if (write(fd, parent_dir, strlen(parent_dir)) < 0) {
+		printf("%s: ERROR: failed to write firmware lookup path\n", __func__);
+		goto END;
+	}
+
+	rc = 0;
+
+	END:
+		// always close if opened, not just on fail
+		if (fd >= 0) {
+			close(fd);
+		}
+
+	if (rc <= 0) {
+		printf("%s: WARN: Failed to set firmware search path. "
+			   "Success only possible if the requested files live in "
+			   "defaults.\nSee "
+			   "https://docs.kernel.org/driver-api/firmware/"
+			   "fw_search_path.html for more information\n",
+			   __func__);
+	}
+
+	return rc;
 }
 
 static bool file_exists(const char *filename)
