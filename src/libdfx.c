@@ -333,7 +333,7 @@ int dfx_cfg_load(int package_id)
 	}
 
 	snprintf(command, sizeof(command),
-		 "/configfs/device-tree/overlays/%s_image_%d",
+		 "/sys/kernel/config/device-tree/overlays/%s_image_%lu",
 		 package_node->package_name, package_node->package_id);
 
 	len = strlen(command) + 1;
@@ -435,7 +435,7 @@ int dfx_cfg_drivers_load(int package_id)
 	}
 
 	snprintf(command, sizeof(command),
-		 "/configfs/device-tree/overlays/%s_driver_%d",
+		 "/sys/kernel/config/device-tree/overlays/%s_driver_%lu",
 		 package_node->package_name, package_node->package_id);
 	len = strlen(command) + 1;
 	str = (char *) calloc((len), sizeof(char));
@@ -900,12 +900,11 @@ static struct dfx_package_node *create_package()
 	else
 		system("mkdir -p /lib/firmware");
 
-	FD = opendir("/configfs/device-tree/overlays/");
+	FD = opendir("/sys/kernel/config/device-tree/overlays/");
 	if (FD)
 		closedir(FD);
 	else {
-		system("mkdir -p /configfs");
-		system("mount -t configfs configfs /configfs");
+		return 0;
 	}
 
 	temp_node = first_node;
