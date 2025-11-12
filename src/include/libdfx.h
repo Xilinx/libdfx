@@ -84,4 +84,5 @@ int dfx_get_meta_header(char *binfile, int *buffer, int buf_size);
 int dfx_cfg_init_file(const char *dfx_bin_file, const char *dfx_dtbo_file,
 		      const char *dfx_driver_dtbo_file, const char *dfx_aes_key_file,
 		      const char *devpath, unsigned long flags, ...);
+int dfx_set_firmware_search_path(const char* file_path);
 #endif
