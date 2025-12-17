@@ -511,6 +511,224 @@ Usage example:
 
 /* More code */
 
+=================================================================================
+-FPGA state info: dfx_get_fpga_state(char *buffer, size_t buf_size)
+=================================================================================
+
+/* This API populates the user-provided buffer with the current operational
+* state of the FPGA as reported by the FPGA manager sysfs interface.
+*
+* buffer:   User buffer address to receive the FPGA state string.
+* buf_size: Size of the user-provided buffer in bytes.
+*
+* Return: Number of bytes read from sysfs in case of success.
+*         or Negative value on failure.
+*/
+
+Usage example:
+#include "libdfx.h"
+
+/* More code */
+
+char buffer[256];
+ret = dfx_get_fpga_state(buffer, sizeof(buffer));
+if (ret < 0 || strcmp(buffer, "operating") != 0)
+    return -1;
+
+/* buffer now contains the FPGA state string */
+
+/* More code */
+
+=================================================================================
+-Overlay path config: dfx_set_overlay_path(const char *overlay_dir,
+const char *requested_path)
+=================================================================================
+
+/* This API writes the requested overlay path to the overlay's `path`
+* attribute in configfs.
+* This function does not check that the path stays set - use
+* dfx_get_overlay_path and dfx_get_overlay_status to check that the application
+* of an overlay was successful.
+*
+* overlay_dir:     Path to the overlay directory in configfs.
+* requested_path: Overlay path string to be written.
+*
+* Return: 0 on success or Negative value on failure.
+*/
+
+Usage example:
+#include "libdfx.h"
+
+/* More code */
+
+ret = dfx_set_overlay_path("/sys/kernel/config/device-tree/overlays/my_overlay",
+                           "/home/user/firmwares/my_overlay.dtbo");
+if (ret < 0)
+    return -1;
+
+/* More code */
+
+=================================================================================
+-FPGA firmware load: dfx_set_fpga_firmware(const char *requested_binary_name)
+=================================================================================
+
+/* This API triggers the FPGA manager to load the specified firmware
+* binary by writing its name to the FPGA manager sysfs interface.
+* This function does not check that the firmware application succeeded.
+* Use dfx_get_fpga_state to check that the fpga was successful programmed.
+*
+* requested_binary_name: Name of the firmware binary to load (not full path)
+*
+* Return: 0 on success or Negative value on failure.
+
+
+*/
+
+Usage example:
+#include "libdfx.h"
+
+/* More code */
+
+ret = dfx_set_fpga_firmware("my_bitstream.bit.bin");
+if (ret < 0)
+    return -1;
+
+/* More code */
+
+=================================================================================
+-FPGA flags config: dfx_set_fpga_flags(const int flags)
+=================================================================================
+
+/* This API sets FPGA manager flags by writing a hex-formatted flag
+* value to the FPGA manager sysfs interface.
+*
+* flags: Integer flag value to apply.
+*
+* Return: 0 on success or Negative value on failure.
+*/
+
+Usage example:
+#include "libdfx.h"
+
+/* More code */
+
+ret = dfx_set_fpga_flags(0x20);
+if (ret < 0)
+    return -1;
+
+/* More code */
+
+=================================================================================
+-FPGA key config: dfx_set_fpga_key(const char *key)
+=================================================================================
+
+/* This API writes an AES key string to the FPGA manager via the
+* sysfs interface.
+*
+* key: AES key string to be written.
+*
+* Return: 0 on success or Negative value on failure.
+*/
+
+Usage example:
+#include "libdfx.h"
+
+/* More code */
+
+ret = dfx_set_fpga_key("0123456789abcdef0123456789abcdef");
+if (ret < 0)
+    return -1;
+
+/* More code */
+
+=================================================================================
+-Overlay path info: dfx_get_overlay_path(const char *overlay_dir,
+char *buffer, size_t buf_size)
+=================================================================================
+
+/* This API populates the user-provided buffer with the currently
+* configured overlay path from configfs.
+*
+* overlay_dir: Path to the overlay directory in configfs.
+* buffer:      User buffer address.
+* buf_size:    Size of the user-provided buffer in bytes.
+*
+* Return: Number of bytes read from configfs in case of success.
+*         or Negative value on failure.
+*/
+
+Usage example:
+#include "libdfx.h"
+
+/* More code */
+
+char buffer[256];
+ret = dfx_get_overlay_path("/sys/kernel/config/device-tree/overlays/my_overlay",
+                           buffer, sizeof(buffer));
+if (ret < 0 || strcmp(buffer, "my_overlay.dtbo") != 0)
+    return -1;
+
+/* More code */
+
+=================================================================================
+-Overlay status info: dfx_get_overlay_status(const char *overlay_dir,
+char *buffer, size_t buf_size)
+=================================================================================
+
+/* This API populates the user-provided buffer with the current
+* status of the specified overlay as reported by configfs.
+*
+* overlay_dir: Path to the overlay directory in configfs.
+* buffer:      User buffer address.
+* buf_size:    Size of the user-provided buffer in bytes.
+*
+* Return: Number of bytes read from configfs in case of success.
+*         or Negative value on failure.
+*/
+
+Usage example:
+#include "libdfx.h"
+
+/* More code */
+
+char buffer[256];
+ret = dfx_get_overlay_status("/sys/kernel/config/device-tree/overlays/my_overlay",
+                             buffer, sizeof(buffer));
+if (ret < 0)
+    return -1;
+
+/* More code */
+
+=================================================================================
+-Kernel Firmware Search Path: dfx_set_firmware_search_path(const char *file_path)
+=================================================================================
+
+/* This API tells the kernel where to search for the firmware file
+* (i.e. bitstream, dtbo, driver)
+* see https://docs.kernel.org/driver-api/firmware/fw_search_path.html
+* for more information
+*
+* The parent dir of the provided file is written to
+* /sys/module/firmware_class/parameters/path so that the kernel can discover
+* the firmware within the parent directory
+*
+* @param file_path the full path to the file to be loaded
+*
+* Return:	0 on success or Negative value on failure.
+*/
+
+Usage example:
+
+#include "libdfx.h"
+
+/* More code */
+
+ret = dfx_set_firmware_search_path("/home/user/firmwares/my_firmware.bit.bin");
+if (ret < 0)
+    return -1;
+
+/* More code */
+
 ================
 Build procedure:
 ================
