@@ -1,6 +1,6 @@
 /***************************************************************
  * Copyright (c) 2020 Xilinx, Inc.  All rights reserved.
- * Copyright (C) 2023, Advanced Micro Devices, Inc. All Rights Reserved
+ * Copyright (C) 2026, Advanced Micro Devices, Inc. All Rights Reserved
  * SPDX-License-Identifier: MIT
  ***************************************************************/
 
@@ -85,4 +85,11 @@ int dfx_cfg_init_file(const char *dfx_bin_file, const char *dfx_dtbo_file,
 		      const char *dfx_driver_dtbo_file, const char *dfx_aes_key_file,
 		      const char *devpath, unsigned long flags, ...);
 int dfx_set_firmware_search_path(const char* file_path);
+int dfx_get_fpga_state(char* buffer, size_t buf_size);
+int dfx_set_overlay_path(const char *overlay_dir, const char *requested_path);
+int dfx_set_fpga_firmware(const char *requested_binary_name);
+int dfx_set_fpga_flags(int flags);
+int dfx_set_fpga_key(const char * key);
+int dfx_get_overlay_path(const char *overlay_dir, char *buffer, size_t buf_size);
+int dfx_get_overlay_status(const char *overlay_dir, char *buffer, size_t buf_size);
 #endif
