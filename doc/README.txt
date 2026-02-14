@@ -16,8 +16,18 @@ supports the FPGA device, the library abstracts away hardware specific details
 ============
 Limitations:
 ============
-	->Libdfx is currently limited to supporting Zynq UltraScale+ MPSoC and
-Versal platforms
+	->Libdfx supports the following platforms:
+		- Zynq UltraScale+ MPSoC: Full support (all APIs)
+		- Versal: Full support (all APIs)
+		- Zynq-7000: Limited support (lightweight sysfs/configfs APIs only)
+	->Platform-Specific API Restrictions:
+		- Zynq-7000: Package-based APIs (dfx_cfg_init, dfx_cfg_init_file,
+		  dfx_cfg_load, dfx_cfg_drivers_load, dfx_cfg_remove, dfx_cfg_destroy)
+		  are NOT supported. Use lightweight APIs instead:
+		  dfx_set_fpga_firmware(), dfx_set_overlay_path(),
+		  dfx_get_fpga_state(), dfx_set_fpga_flags(), dfx_set_fpga_key(),
+		  dfx_get_overlay_path(), dfx_get_overlay_status(),
+		  dfx_set_firmware_search_path()
 	->Input package/folder should contain only one bitstream/PDI image file
 and its relevant overlay file
 	->To use the deferred probe functionality Both Image DTBO and relevant
@@ -430,6 +440,11 @@ Usage example:
 =========================
 Example Application flow:
 =========================
+
+Note: The following example uses package-based APIs which are supported on
+Zynq UltraScale+ MPSoC and Versal platforms only. For Zynq-7000, see the
+lightweight API example below.
+
 #include "libdfx.h"
 
 int main()
@@ -458,6 +473,64 @@ int main()
 
 	return ret;	
 
+}
+
+==========================================
+Example Application flow for Zynq-7000:
+==========================================
+
+Note: On Zynq-7000, use lightweight sysfs/configfs APIs directly.
+Package-based APIs are not supported.
+
+#include <stdio.h>
+#include "libdfx.h"
+#include <sys/stat.h>
+#include <sys/types.h>
+
+int main()
+{
+  int ret = 0;
+  const char *overlay_dir = "/sys/kernel/config/device-tree/overlays/full";
+  char state_buf[128];
+  char status_buf[128];
+
+  ret = dfx_set_fpga_flags(DFX_NORMAL_EN);
+  if (ret != 0)
+    return ret;
+  printf("dfx_set_fpga_flags: FPGA flags set successfully\r\n");
+
+  ret = dfx_set_firmware_search_path("/lib/firmware/xilinx/pl/pl.bin");
+  if (ret != 0)
+    return ret;
+  printf("dfx_set_firmware_search_path: Set firmware search path successfully\r\n");
+
+  ret = dfx_set_fpga_firmware("pl.bin");
+  if (ret != 0)
+    return ret;
+  printf("dfx_set_fpga_firmware: FPGA firmware set successfully\r\n");
+
+  if (mkdir(overlay_dir, 0755))
+  {
+    printf("Failed to create overlay dir %s\n", overlay_dir);
+    return -1;
+  }
+
+  ret = dfx_set_overlay_path(overlay_dir, "pl.dtbo");
+  if (ret != 0)
+    return ret;
+
+  ret = dfx_get_overlay_status(overlay_dir, status_buf, sizeof(status_buf));
+  if (ret != 0)
+    return ret;
+  printf("Overlay status: %s\n", status_buf);
+
+  ret = dfx_get_fpga_state(state_buf, sizeof(state_buf));
+  if (ret != 0)
+    return ret;
+
+  printf("FPGA state after load: %s\n", state_buf);
+
+  return 0;
 }
 
 ====================================================================
@@ -737,7 +810,15 @@ Build procedure:
 	3. cd build
 	4. Ensure required tool chain added to your path
 	5. cmake -DCMAKE_TOOLCHAIN_FILE="cmake tool chain file(complete path)" ../
-			Example: cmake -DCMAKE_TOOLCHAIN_FILE="/libdfx/cmake/toolchain.cmake" ../
+
+		Examples:
+
+		For Zynq-7000 (32-bit ARM):
+		cmake -DCMAKE_TOOLCHAIN_FILE="/libdfx/cmake/toolchain.cmake" -DTARGET_PLATFORM=ZYNQ ../
+
+		For ZynqMP or Versal (64-bit ARM, default):
+		cmake -DCMAKE_TOOLCHAIN_FILE="/libdfx/cmake/toolchain.cmake" ../
+
 	6. make
 
 Once the build is successfully completed the library static, shared object files and app elf file are available in the below paths.

@@ -1,5 +1,5 @@
  * Copyright (c) 2020 Xilinx, Inc.  All rights reserved.
- * Copyright (C) 2023, Advanced Micro Devices, Inc. All Rights Reserved.
+ * Copyright (C) 2023 - 2026, Advanced Micro Devices, Inc. All Rights Reserved.
  * SPDX-License-Identifier: MIT
 
 Introduction
@@ -25,8 +25,16 @@ Building libdfx from git:
 2. mkdir build
 3. cd build
 4. Ensure required tool chain added to your path
-5. cmake  -DCMAKE_TOOLCHAIN_FILE="cmake tool chain file(complete path)" ../
-   Example: cmake -DCMAKE_TOOLCHAIN_FILE="/libdfx/cmake/toolchain.cmake" ../
+5. cmake -DCMAKE_TOOLCHAIN_FILE="cmake tool chain file(complete path)" ../
+
+   Examples:
+
+   For Zynq-7000 (32-bit ARM):  
+   cmake -DCMAKE_TOOLCHAIN_FILE="/libdfx/cmake/toolchain.cmake" -DTARGET_PLATFORM=ZYNQ ../
+
+   For ZynqMP or Versal (64-bit ARM, default):  
+   cmake -DCMAKE_TOOLCHAIN_FILE="/libdfx/cmake/toolchain.cmake" ../
+
 6. make
 
 Once the build is successfully completed the library static, shared object files and app elf file are available in the below paths.
@@ -37,6 +45,9 @@ Once the build is successfully completed the library static, shared object files
 
 -build/apps/dfx_app
 
-Note: Libdfx is currently limited to supporting Zynq UltraScale+ MPSoC and Versal platforms.
+Note: Libdfx supports the following platforms:
+- **Zynq UltraScale+ MPSoC**: Full support (all APIs)
+- **Versal**: Full support (all APIs)
+- **Zynq-7000**: Limited support (lightweight sysfs/configfs APIs only)
 
 For more information refer doc/README.txt.

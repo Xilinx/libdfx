@@ -35,6 +35,7 @@
 #define DFX_IOCTL_LOAD_DMA_BUFF        _IOWR('R', 1, __u32)
 
 #define INVALID_PLATFORM	0x0U
+#define ZYNQ7000_PLATFORM	0x1U
 #define ZYNQMP_PLATFORM		0x2U
 #define VERSAL_PLATFORM		0x3U
 
@@ -589,7 +590,7 @@ int dfx_cfg_init_file(const char *dfx_bin_file, const char *dfx_dtbo_file,
 int dfx_cfg_load(int package_id)
 {
 	FPGA_NODE *package_node;
-	int len, fd, buffd, ret = 0, err = 0;
+	int len, fd, buffd, ret = 0, err = 0, platform;
 	char path_buf[MAX_CMD_LEN];
 	char *overlay_dir_path;
 	char state_buf[128];
@@ -599,6 +600,16 @@ int dfx_cfg_load(int package_id)
 
 	gettimeofday(&total_t0, NULL);
 #endif
+
+	platform = dfx_getplatform();
+	// Package-based APIs not supported on Zynq-7000
+	if (platform == ZYNQ7000_PLATFORM) {
+		printf("%s: ERROR: Package-based APIs are not supported on Zynq-7000\n", __func__);
+		printf("Use lightweight sysfs/configfs APIs instead\n");
+		ret = -DFX_INVALID_PLATFORM_ERROR;
+		goto END;
+	}
+
 	if (package_id < 0) {
 		printf("%s: Invalid package id\n", __func__);
 		ret = -DFX_INVALID_PACKAGE_ID_ERROR;
@@ -705,7 +716,7 @@ int dfx_cfg_drivers_load(int package_id)
 {
 	FPGA_NODE *package_node;
 	char path_buf[MAX_CMD_LEN];
-	int len, ret = 0;
+	int len, ret = 0, platform;
 	char *overlay_dir_path;
 	char state_buf[128] = {};
 #ifdef ENABLE_LIBDFX_TIME
@@ -714,6 +725,16 @@ int dfx_cfg_drivers_load(int package_id)
 
 	gettimeofday(&t0, NULL);
 #endif
+
+	platform = dfx_getplatform();
+	// Package-based APIs not supported on Zynq-7000
+	if (platform == ZYNQ7000_PLATFORM) {
+		printf("%s: ERROR: Package-based APIs are not supported on Zynq-7000\n", __func__);
+		printf("Use lightweight sysfs/configfs APIs instead\n");
+		ret = -DFX_INVALID_PLATFORM_ERROR;
+		goto END;
+	}
+
 	if (package_id < 0) {
 		printf("%s: Invalid package id\n", __func__);
 		ret = -DFX_INVALID_PACKAGE_ID_ERROR;
@@ -782,7 +803,7 @@ int dfx_cfg_remove(int package_id)
 {
 	FPGA_NODE *package_node;
 	char command[MAX_CMD_LEN];
-	int ret = 0;
+	int ret = 0, platform;
 	DIR *FD;
 #ifdef ENABLE_LIBDFX_TIME
 	struct timeval t1, t0;
@@ -790,6 +811,16 @@ int dfx_cfg_remove(int package_id)
 
 	gettimeofday(&t0, NULL);
 #endif
+
+	platform = dfx_getplatform();
+	// Package-based APIs not supported on Zynq-7000
+	if (platform == ZYNQ7000_PLATFORM) {
+		printf("%s: ERROR: Package-based APIs are not supported on Zynq-7000\n", __func__);
+		printf("Use lightweight sysfs/configfs APIs instead\n");
+		ret = -DFX_INVALID_PLATFORM_ERROR;
+		goto END;
+	}
+
 	if (package_id < 0) {
 		printf("%s: Invalid package id\n", __func__);
 		ret = -DFX_INVALID_PACKAGE_ID_ERROR;
@@ -839,13 +870,23 @@ int dfx_cfg_destroy(int package_id)
 {
 	FPGA_NODE *package_node;
 	char command[MAX_CMD_LEN];
-	int ret = 0;
+	int ret = 0, platform;
 #ifdef ENABLE_LIBDFX_TIME
 	struct timeval t1, t0;
 	double time;
 
 	gettimeofday(&t0, NULL);
 #endif
+
+	platform = dfx_getplatform();
+	// Package-based APIs not supported on Zynq-7000
+	if (platform == ZYNQ7000_PLATFORM) {
+		printf("%s: ERROR: Package-based APIs are not supported on Zynq-7000\n", __func__);
+		printf("Use lightweight sysfs/configfs APIs instead\n");
+		ret = -DFX_INVALID_PLATFORM_ERROR;
+		goto END;
+	}
+
 	if (package_id < 0) {
 		printf("%s: Invalid package id\n", __func__);
 		ret = -DFX_INVALID_PACKAGE_ID_ERROR;
@@ -1373,6 +1414,8 @@ static int dfx_getplatform(void)
 {
 	char *zynqmpstr = "Xilinx ZynqMP FPGA Manager";
 	char *Versalstr = "Xilinx Versal FPGA Manager";
+	char *zynq7000str = "Xilinx Zynq FPGA Manager";
+
 	char fpstr[PLATFORM_STR_LEN];
 	FILE *fptr;
 
@@ -1385,7 +1428,9 @@ static int dfx_getplatform(void)
 	// reads text until newline
 	fscanf(fptr, "%[^\n]", fpstr);
 	fclose(fptr);
-	if (!strcmp(zynqmpstr, fpstr))
+	if (!strcmp(zynq7000str, fpstr))
+		return ZYNQ7000_PLATFORM;
+	else if (!strcmp(zynqmpstr, fpstr))
 		return ZYNQMP_PLATFORM;
 	else if (!strcmp(Versalstr, fpstr))
 		return VERSAL_PLATFORM;
@@ -1493,6 +1538,14 @@ static int dfx_cfg_init_common(const char *dfx_package_path,
 	platform = dfx_getplatform();
 	if (platform == INVALID_PLATFORM) {
 		printf("%s: fpga manager not enabled in the kernel Image\r\n", __func__);
+		ret = -DFX_INVALID_PLATFORM_ERROR;
+		goto END;
+	}
+
+	// Package-based APIs not supported on Zynq-7000
+	if (platform == ZYNQ7000_PLATFORM) {
+		printf("%s: ERROR: Package-based APIs are not supported on Zynq-7000\n", __func__);
+		printf("Use lightweight sysfs/configfs APIs instead\n");
 		ret = -DFX_INVALID_PLATFORM_ERROR;
 		goto END;
 	}
