@@ -295,16 +295,16 @@ int dfx_get_fpga_state(char *buffer, const size_t buf_size)
 int dfx_set_overlay_path(const char *overlay_dir, const char *requested_path)
 {
 	char full_path[256];
-	if (sizeof(full_path) < strlen(overlay_dir) + 6) { // '/' + '\0' + "path"
+	if (strlen(overlay_dir) > sizeof(full_path) - 6) { // '/' + '\0' + "path"
 		printf("%s: Resulting path `%s` is too long for internal buffer (max: "
 			   "%d)\n",
 			   __func__, overlay_dir, MAX_CMD_LEN);
 		return -1;
 	}
 
-	strcpy(full_path, overlay_dir);
+	snprintf(full_path, sizeof(full_path), "%s", overlay_dir);
 	strip_trailing(full_path, '/');
-	strcat(full_path, "/path");
+	snprintf(full_path + strlen(full_path), sizeof(full_path) - strlen(full_path), "/path");
 
 	if (write_string_to_file(full_path, requested_path)) {
 		printf("%s: Failed to apply the overlay - could not write to path file\n",
@@ -403,16 +403,16 @@ int dfx_get_overlay_path(const char *overlay_dir, char *buffer,
 						 const size_t buf_size)
 {
 	char full_path[MAX_CMD_LEN];
-	if (sizeof(full_path) < strlen(overlay_dir) + 6) { // + '/' + '\0' + "path"
+	if (strlen(overlay_dir) > sizeof(full_path) - 6) { // + '/' + '\0' + "path"
 		printf("%s: Resulting path `%s` is too long for internal buffer (max: "
 			   "%d)\n",
 			   __func__, overlay_dir, MAX_CMD_LEN);
 		return -1;
 	}
 
-	strcpy(full_path, overlay_dir);
+	snprintf(full_path, sizeof(full_path), "%s", overlay_dir);
 	strip_trailing(full_path, '/');
-	strcat(full_path, "/path");
+	snprintf(full_path + strlen(full_path), sizeof(full_path) - strlen(full_path), "/path");
 
 	return read_single_line(full_path, buffer, buf_size);
 }
@@ -432,16 +432,16 @@ int dfx_get_overlay_status(const char *overlay_dir, char *buffer,
 						   const size_t buf_size)
 {
 	char full_path[MAX_CMD_LEN];
-	if (sizeof(full_path) < strlen(overlay_dir) + 8) { // '/' + '\0' + "status"
+	if (strlen(overlay_dir) > sizeof(full_path) - 8) { // '/' + '\0' + "status"
 		printf("%s: Resulting path `%s` is too long for internal buffer (max: "
 			   "%d)\n",
 			   __func__, overlay_dir, MAX_CMD_LEN);
 		return -1;
 	}
 
-	strcpy(full_path, overlay_dir);
+	snprintf(full_path, sizeof(full_path), "%s", overlay_dir);
 	strip_trailing(full_path, '/');
-	strcat(full_path, "/status");
+	snprintf(full_path + strlen(full_path), sizeof(full_path) - strlen(full_path), "/status");
 
 	return read_single_line(full_path, buffer, buf_size);
 }
@@ -648,7 +648,7 @@ int dfx_cfg_load(int package_id)
 
 	len = strlen(path_buf) + 1;
 	overlay_dir_path = (char *) calloc(len, sizeof(char));
-	strncpy(overlay_dir_path, path_buf, len);
+	snprintf(overlay_dir_path, len, "%s", path_buf);
 	package_node->load_image_overlay_pck_path = overlay_dir_path;
 	if (mkdir(package_node->load_image_overlay_pck_path, 0755)) {
 		printf("%s: Failed to create overlay dir `%s`\n", __func__,
@@ -762,7 +762,7 @@ int dfx_cfg_drivers_load(int package_id)
 			 package_node->package_id);
 	len = (int)strlen(path_buf) + 1;
 	overlay_dir_path = (char *) calloc((len), sizeof(char));
-	strncpy(overlay_dir_path, path_buf, len);
+	snprintf(overlay_dir_path, len, "%s", path_buf);
 	package_node->load_drivers_overlay_pck_path = overlay_dir_path;
 
 	if (mkdir(package_node->load_image_overlay_pck_path, 0755)) {
@@ -1076,12 +1076,11 @@ static int read_package_folder(struct dfx_package_node *package_node)
 					str = (char *) calloc(
 							(len + pcklen + 1),
 							sizeof(char));
-					strcpy(str, package_node->package_path);
-					strcat(str, dir->d_name);
+					snprintf(str, len + pcklen + 1, "%s%s", package_node->package_path, dir->d_name);
 					package_node->load_image_path = str;
 					str = (char *) calloc((len + 1),
 								sizeof(char));
-					strcpy(str, dir->d_name);
+					snprintf(str, len + 1, "%s", dir->d_name);
 					package_node->load_image_name = str;
 					bin_count++;
 				} else if ((!strcmp(file_name + (len - 4),
@@ -1090,12 +1089,11 @@ static int read_package_folder(struct dfx_package_node *package_node)
 					str = (char *) calloc(
 							(len + pcklen + 1),
 							sizeof(char));
-					strcpy(str, package_node->package_path);
-					strcat(str, dir->d_name);
+					snprintf(str, len + pcklen + 1, "%s%s", package_node->package_path, dir->d_name);
 					package_node->load_image_path = str;
 					str = (char *) calloc((len + 1),
 							sizeof(char));
-					strcpy(str, dir->d_name);
+					snprintf(str, len + 1, "%s", dir->d_name);
 					package_node->load_image_name = str;
 					bin_count++;
 				} else if (!strcmp(file_name + (len - 7),
