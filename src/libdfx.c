@@ -44,11 +44,20 @@
 #define PLATFORM_STR_LEN	128U
 #define FPGA_WORD_SIZE		4U
 #define FPGA_DUMMY_BYTE		0xFFU
+#define COPY_BUF_SIZE		4096U
 
 #define ZYNQMP_MAX_ERR	27U
 
 #ifndef DTBO_ROOT_DIR
 #define DTBO_ROOT_DIR "/sys/kernel/config/device-tree/overlays"
+#endif
+
+#ifndef ZYNQMP_READBACK_TYPE_PATH
+#define ZYNQMP_READBACK_TYPE_PATH "/sys/module/zynqmp_fpga/parameters/readback_type"
+#endif
+
+#ifndef ZYNQMP_FPGA_IMAGE_PATH
+#define ZYNQMP_FPGA_IMAGE_PATH "/sys/kernel/debug/fpga/fpga0/image"
 #endif
 
 
@@ -146,6 +155,7 @@ static inline double gettime(struct timeval  t0, struct timeval t1);
 static void strip_trailing(char *haystack, char needle);
 static int read_single_line(const char *path, char *buffer, size_t buf_size);
 static int write_string_to_file(const char *path, const char *src);
+static int copy_file(const char *src_path, const char *dst_path);
 static void remove_overlay_dir(const char *dir);
 
 /**
@@ -241,6 +251,68 @@ static int write_string_to_file(const char *path, const char *src)
 
 	printf("%s: `%s` written to `%s`\n", __func__, src, path);
 	return 0;
+}
+
+/**
+ * copy_file() - copy the full contents of one file into another
+ * @src_path:	path to read from (may be a streaming node such as debugfs)
+ * @dst_path:	path to create/overwrite with the copied contents
+ *
+ * Copies @src_path to @dst_path using a bounded read/write loop until EOF.
+ * A sized single read is deliberately avoided because streaming nodes (e.g.
+ * the debugfs FPGA `image` node) report size 0 via stat(). All steps are
+ * checked and short writes are treated as errors.
+ *
+ * Return:	0 on success
+ *	        -1 on failure
+ */
+static int copy_file(const char *src_path, const char *dst_path)
+{
+	unsigned char iobuf[COPY_BUF_SIZE];
+	FILE *in = NULL, *out = NULL;
+	int ret = 0;
+	size_t n;
+
+	in = fopen(src_path, "rb");
+	if (!in) {
+		printf("%s: Failed to open `%s` for reading\n", __func__,
+		       src_path);
+		ret = -1;
+		goto END;
+	}
+
+	out = fopen(dst_path, "wb");
+	if (!out) {
+		printf("%s: Failed to open `%s` for writing\n", __func__,
+		       dst_path);
+		ret = -1;
+		goto END;
+	}
+
+	while ((n = fread(iobuf, 1, sizeof(iobuf), in)) > 0) {
+		if (fwrite(iobuf, 1, n, out) != n) {
+			printf("%s: Write to `%s` failed\n", __func__, dst_path);
+			ret = -1;
+			goto END;
+		}
+	}
+
+	if (ferror(in)) {
+		printf("%s: Read from `%s` failed\n", __func__, src_path);
+		ret = -1;
+		goto END;
+	}
+
+END:
+	if (in)
+		fclose(in);
+
+	if (out && fclose(out) != 0) {
+		printf("%s: Failed to close `%s`\n", __func__, dst_path);
+		ret = -1;
+	}
+
+	return ret;
 }
 
 /**
@@ -383,6 +455,52 @@ int dfx_set_fpga_key(const char *key)
 			   __func__);
 		return -1;
 	}
+
+	return 0;
+}
+
+/**
+ * dfx_fpga_readback(...) - read back ZynqMP PL configuration into a file
+ *
+ * @type:	readback type: 0 = configuration registers,
+ *		1 = configuration data frames
+ * @out_path:	destination file for the captured readback data
+ *
+ * This function performs the two-step readback using direct file I/O
+ * (no shell): it selects the readback type via the `zynqmp_fpga` module
+ * parameter, then drains the debugfs `image` node into @out_path. ZynqMP-only;
+ * debugfs is assumed to be already mounted.
+ *
+ * Return:	0 on success,
+ *	        -DFX_INVALID_PARAM on invalid arguments,
+ *	        -DFX_INVALID_PLATFORM_ERROR on a non-ZynqMP platform,
+ *	        -DFX_READBACK_ERROR on a failed file operation
+ */
+int dfx_fpga_readback(const unsigned type, const char *out_path)
+{
+	char buf[32];
+
+	if (out_path == NULL || type > 1) {
+		printf("%s: Invalid input args\n", __func__);
+		return -DFX_INVALID_PARAM;
+	}
+
+	if (dfx_getplatform() != ZYNQMP_PLATFORM) {
+		printf("%s: Readback is supported on ZynqMP only\n", __func__);
+		return -DFX_INVALID_PLATFORM_ERROR;
+	}
+
+	/* Select readback type */
+	snprintf(buf, sizeof(buf), "%u", type);
+	if (write_string_to_file(ZYNQMP_READBACK_TYPE_PATH, buf))
+		return -DFX_READBACK_ERROR;
+
+	/*
+	 * Drain the debugfs `image` node into the destination file. The node
+	 * reports size 0 via stat(), so copy_file() streams it until EOF.
+	 */
+	if (copy_file(ZYNQMP_FPGA_IMAGE_PATH, out_path))
+		return -DFX_READBACK_ERROR;
 
 	return 0;
 }

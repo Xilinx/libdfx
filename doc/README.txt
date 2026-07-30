@@ -802,6 +802,42 @@ if (ret < 0)
 
 /* More code */
 
+=================================================================================
+-PL configuration readback: dfx_fpga_readback(const unsigned type,
+const char *out_path)
+=================================================================================
+
+/* This API performs a ZynqMP PL configuration readback and writes the
+* captured data to a file using direct file I/O (no shell): it selects the
+* readback type via the zynqmp_fpga module parameter
+* (/sys/module/zynqmp_fpga/parameters/readback_type) and then drains the
+* debugfs node (/sys/kernel/debug/fpga/fpga0/image) into out_path.
+*
+* type:     Readback type:
+*             0 = configuration registers,
+*             1 = configuration data frames.
+* out_path: Destination file for the captured readback data.
+*
+* Note: This API is supported on ZynqMP only. On any other platform it returns
+* -DFX_INVALID_PLATFORM_ERROR. debugfs is assumed to be already mounted.
+* Return: 0 on success or Negative value on failure.
+*/
+
+Usage example:
+#include "libdfx.h"
+
+/* More code */
+
+ret = dfx_fpga_readback(0, "/tmp/rb_reg.bin");
+if (ret < 0)
+    return ret;
+
+ret = dfx_fpga_readback(1, "/tmp/rb_frame.bin");
+if (ret < 0)
+    return ret;
+
+/* More code */
+
 ================
 Build procedure:
 ================

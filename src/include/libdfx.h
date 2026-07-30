@@ -31,6 +31,7 @@
 #define DFX_INVALID_PARAM			(0x11U)
 #define DFX_DUPLICATE_DRIVERS_DTBO_ERROR	(0x12U)
 #define DFX_DUPLICATE_AES_KEY_ERROR		(0x13U)
+#define DFX_READBACK_ERROR			(0x14U)
 
 /* XILFPGA/PMUFW Error Codes */
 #define XFPGA_ERROR_CSUDMA_INIT_FAIL		(0x2U)
@@ -92,4 +93,5 @@ int dfx_set_fpga_flags(int flags);
 int dfx_set_fpga_key(const char * key);
 int dfx_get_overlay_path(const char *overlay_dir, char *buffer, size_t buf_size);
 int dfx_get_overlay_status(const char *overlay_dir, char *buffer, size_t buf_size);
+int dfx_fpga_readback(const unsigned type, const char *out_path);
 #endif
