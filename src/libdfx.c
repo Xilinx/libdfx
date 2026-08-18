@@ -39,6 +39,9 @@
 #define ZYNQMP_PLATFORM		0x2U
 #define VERSAL_PLATFORM		0x3U
 
+#define FIRMWARE_BASE_DIR	"/sys/devices/platform"
+#define FIRMWARE_PATH_MAX	128
+
 #define MAX_CMD_LEN		512U
 #define MAX_AES_KEY_LEN         64U
 #define PLATFORM_STR_LEN	128U
@@ -1037,6 +1040,39 @@ END:
 	return ret;
 }
 
+static const char *dfx_get_versal_firmware_path(void)
+{
+	static char base_path[FIRMWARE_PATH_MAX];
+	DIR *dir;
+	struct dirent *entry;
+
+	if (base_path[0])
+		return base_path;
+
+	dir = opendir(FIRMWARE_BASE_DIR);
+	if (!dir) {
+		printf("%s: Failed to open %s\n", __func__, FIRMWARE_BASE_DIR);
+		return NULL;
+	}
+
+	while ((entry = readdir(dir)) != NULL) {
+		if (!strstr(entry->d_name, "firmware:"))
+			continue;
+		if (!strstr(entry->d_name, "-firmware"))
+			continue;
+
+		snprintf(base_path, sizeof(base_path), "%s/%s",
+			 FIRMWARE_BASE_DIR, entry->d_name);
+		closedir(dir);
+		return base_path;
+	}
+
+	closedir(dir);
+	printf("%s: No firmware node found under %s\n",
+	       __func__, FIRMWARE_BASE_DIR);
+	return NULL;
+}
+
 /* This API populates buffer with {Node ID, Unique ID, Parent Unique ID, Function ID}
  * for each applicable NodeID in the system.
  *
@@ -1047,7 +1083,8 @@ END:
  */
 int dfx_get_active_uid_list(int *buffer)
 {
-	const char* filename = "/sys/devices/platform/firmware:versal-firmware/uid-read";
+	char filename[FIRMWARE_PATH_MAX];
+	const char *fw_path;
 	int platform, ret = 0, count = 0;
 	FILE* fd;
 #ifdef ENABLE_LIBDFX_TIME
@@ -1061,6 +1098,13 @@ int dfx_get_active_uid_list(int *buffer)
 		ret = -DFX_INVALID_PLATFORM_ERROR;
 		goto END;
 	}
+
+	fw_path = dfx_get_versal_firmware_path();
+	if (!fw_path) {
+		ret = -DFX_FAIL_TO_OPEN_BIN_FILE;
+		goto END;
+	}
+	snprintf(filename, sizeof(filename), "%s/uid-read", fw_path);
 
 	fd = fopen(filename, "rb");
 	if (!fd) {
@@ -1097,11 +1141,11 @@ END:
  */
 int dfx_get_meta_header(char *binfile, int *buffer, int buf_size)
 {
-	const char* filename = "/sys/devices/platform/firmware:versal-firmware/meta-header-read";
-	char command[2048], *token, *tmp, *tmp1;
+	char filename[FIRMWARE_PATH_MAX];
+	const char *fw_path;
+	char command[2048], *token, *tmp, *tmp_orig, *tmp1;
 	int platform, ret = 0, count = 0;
 	FILE* fd;
-	DIR *FD;
 #ifdef ENABLE_LIBDFX_TIME
 	struct timeval t1, t0;
 	double time;
@@ -1114,6 +1158,13 @@ int dfx_get_meta_header(char *binfile, int *buffer, int buf_size)
 		goto END;
 	}
 
+	fw_path = dfx_get_versal_firmware_path();
+	if (!fw_path) {
+		ret = -DFX_FAIL_TO_OPEN_BIN_FILE;
+		goto END;
+	}
+	snprintf(filename, sizeof(filename), "%s/meta-header-read", fw_path);
+
 	fd = fopen(binfile, "rb");
 	if (!fd) {
 		printf("Unable to open binary file!");
@@ -1124,13 +1175,14 @@ int dfx_get_meta_header(char *binfile, int *buffer, int buf_size)
 
 	dfx_set_firmware_search_path(binfile);
 	tmp = strdup(binfile);
+	tmp_orig = tmp;
 	while((token = strsep(&tmp, "/")))
 		tmp1 = token;
 
-	snprintf(command, sizeof(command), "echo %s > /sys/devices/platform/firmware:versal-firmware/firmware", tmp1);
+	snprintf(command, sizeof(command), "echo %s > %s/firmware", tmp1, fw_path);
 	system(command);
 
-	free(tmp);
+	free(tmp_orig);
 
 	fd = fopen(filename, "rb");
 	if (!fd) {
@@ -1150,7 +1202,6 @@ int dfx_get_meta_header(char *binfile, int *buffer, int buf_size)
 	}
 
 	fclose(fd);
-	closedir(FD);
 
 	ret = count * sizeof(int);
 END:
