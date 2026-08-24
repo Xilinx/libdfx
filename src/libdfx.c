@@ -1114,12 +1114,20 @@ int dfx_get_active_uid_list(int *buffer)
 	}
 
 	while(!feof(fd)) {
-		fread(&buffer[count], sizeof(int), 1,fd);
+		if (fread(&buffer[count], sizeof(int), 1, fd) != 1)
+			break;
 		count++;
 	}
 
+	if (ferror(fd))
+		ret = -DFX_READBACK_ERROR;
+
 	fclose(fd);
-	ret = (count - 1) *  sizeof(int);
+
+	if (ret < 0)
+		goto END;
+
+	ret = count * sizeof(int);
 END:
 #ifdef ENABLE_LIBDFX_TIME
 	gettimeofday(&t1, NULL);
@@ -1192,16 +1200,23 @@ int dfx_get_meta_header(char *binfile, int *buffer, int buf_size)
 	}
 
 	while(!feof(fd)) {
-		if(buf_size < count) {
-			count = -DFX_INSUFFICIENT_MEM;
+		if(count >= buf_size / (int)sizeof(int)) {
+			ret = -DFX_INSUFFICIENT_MEM;
 			break;
 		}
 
-		fread(&buffer[count], sizeof(int), 1,fd);
+		if (fread(&buffer[count], sizeof(int), 1, fd) != 1)
+			break;
 		count++;
 	}
 
+	if (ferror(fd))
+		ret = -DFX_READBACK_ERROR;
+
 	fclose(fd);
+
+	if (ret < 0)
+		goto END;
 
 	ret = count * sizeof(int);
 END:
